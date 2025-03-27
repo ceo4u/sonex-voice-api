@@ -8,7 +8,7 @@ services:
     startCommand: gunicorn api:app
     envVars:
       - key: PYTHON_VERSION
-        value: 3.9.0
+        value: 3.10.11
       - key: PORT
         value: 10000
       - key: PYTHONUNBUFFERED
