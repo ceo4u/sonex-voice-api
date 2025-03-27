@@ -2,13 +2,13 @@ services:
   - type: web
     name: voice-cloning-api
     env: python
-    buildCommand: "python -m pip install --upgrade pip setuptools wheel && python -m pip install --no-cache-dir -r requirements.txt"
+    buildCommand: "docker build -t sonex-voice-api ."
     startCommand: "python api.py"
-    runtime: python-3.10.12
+    runtime: python-3.11.9
 
     envVars:
       - key: PYTHON_VERSION
-        value: 3.10.12
+        value: 3.11.9
       - key: PORT
         value: 10000
       - key: PYTHONUNBUFFERED
