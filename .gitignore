@@ -1,3 +1,30 @@
+<<<<<<< HEAD
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+*.pickle
+*.npy
+*.so
+*.egg
+*.egg-info/
+.installed.cfg
+*.manifest
+*.spec
+
+# Models and audio files
+models.zip
+saved_models/
+*.pt
+*.pth
+*.bin
+*.wav
+*.mp3
+UserAudio/
+
+# Build and distribution
+build/
+=======
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -10,10 +37,17 @@ __pycache__/
 .Python
 build/
 develop-eggs/
+>>>>>>> feccad4ba3a84a07dbeb441af2ee1b011b4a03ee
 dist/
 downloads/
 eggs/
 .eggs/
+<<<<<<< HEAD
+parts/
+var/
+wheels/
+share/python-wheels/
+=======
 lib/
 lib64/
 parts/
@@ -126,6 +160,7 @@ celerybeat.pid
 
 # SageMath parsed files
 *.sage.py
+>>>>>>> feccad4ba3a84a07dbeb441af2ee1b011b4a03ee
 
 # Environments
 .env
@@ -136,6 +171,45 @@ ENV/
 env.bak/
 venv.bak/
 
+<<<<<<< HEAD
+# IDE and temporary files
+.idea/
+.ipynb_checkpoints/
+.suo
+*.log
+*.aux
+*.out
+*.synctex.gz
+*.blg
+*.bbl
+*.bcf
+*.toc
+.spyderproject
+.spyproject
+.ropeproject
+
+# Testing and docs
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+docs/_build/
+/site
+
+# Package managers
+Pipfile.lock
+poetry.lock
+pdm.lock
+.pdm.toml
+__pypackages__/
+=======
 # Spyder project settings
 .spyderproject
 .spyproject
@@ -172,3 +246,4 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+>>>>>>> feccad4ba3a84a07dbeb441af2ee1b011b4a03ee
