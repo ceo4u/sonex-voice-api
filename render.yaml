@@ -2,13 +2,17 @@ services:
   - type: web
     name: voice-cloning-api
     env: python
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    buildCommand: |
+      python -m pip install --upgrade pip
+      pip install -r requirements.txt
     startCommand: gunicorn api:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.0
       - key: PORT
         value: 10000
+      - key: PYTHONUNBUFFERED
+        value: 1
     healthCheckPath: /api/health
     autoDeploy: true
     disk:
