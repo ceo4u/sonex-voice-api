@@ -3,8 +3,9 @@ services:
     name: voice-cloning-api
     env: python
     buildCommand: |
-      python -m pip install --upgrade pip
-      pip install -r requirements.txt
+      python -m pip install --upgrade pip setuptools wheel
+      pip install --upgrade pip
+      pip install --no-cache-dir -r requirements.txt
     startCommand: gunicorn api:app
     envVars:
       - key: PYTHON_VERSION
