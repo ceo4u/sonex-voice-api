@@ -2,13 +2,13 @@ services:
   - type: web
     name: voice-cloning-api
     env: python
-    buildCommand: |
-      python -m pip install --upgrade pip setuptools wheel
-      pip install --no-cache-dir -r requirements.txt
-    startCommand: gunicorn api:app
+    buildCommand: "python -m pip install --upgrade pip setuptools wheel && python -m pip install --no-cache-dir -r requirements.txt"
+    startCommand: "python api.py"
+    runtime: python-3.10.12
+
     envVars:
       - key: PYTHON_VERSION
-        value: 3.10.11
+        value: 3.10.12
       - key: PORT
         value: 10000
       - key: PYTHONUNBUFFERED
