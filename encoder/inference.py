@@ -9,7 +9,15 @@ import torch
 
 class Encoder:
     def __init__(self, model_path):
-        self.model = torch.jit.load(model_path)
+        try:
+            # First try loading as TorchScript model
+            self.model = torch.jit.load(model_path)
+        except RuntimeError:
+            # If that fails, load as regular PyTorch model
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            self.model = SpeakerEncoder(device, device)
+            checkpoint = torch.load(model_path, map_location=device)
+            self.model.load_state_dict(checkpoint["model_state"])
         self.model.eval()
         
     def embed_utterance(self, wav):
