@@ -3,7 +3,7 @@ services:
     name: voice-cloning-api
     env: python
     buildCommand: "docker build -t sonex-voice-api ."
-    startCommand: "python api.py"
+    startCommand: "gunicorn api:app --bind 0.0.0.0:5000"
     runtime: python-3.11.9
 
     envVars:
