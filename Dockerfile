@@ -1,21 +1,24 @@
-# Use the official Python image with the desired version (3.10.12 in this example)
+# Use the official Python 3.11.9 slim image as the base
 FROM python:3.11.9-slim
 
-# Set a working directory inside the container
+# Set the working directory inside the container
 WORKDIR /app
 
-# Copy your requirements file first so that Docker can cache the pip install step
+# Install build dependencies (including gcc and other essential tools)
+RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*
+
+# Copy the requirements file into the container first to leverage Docker caching
 COPY requirements.txt .
 
-# Upgrade pip and install dependencies
+# Upgrade pip and install dependencies from requirements.txt
 RUN pip install --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of your application code
+# Copy the rest of your application code into the container
 COPY . .
 
-# Expose port 5000 (adjust if your app uses a different port)
+# Expose the port your app runs on
 EXPOSE 5000
 
-# Define the command to run your API
-CMD ["python", "api.py"]
+# Define the command to run your API using gunicorn
+CMD ["gunicorn", "api:app", "--bind", "0.0.0.0:5000"]
