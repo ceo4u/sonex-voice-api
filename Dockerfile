@@ -16,15 +16,17 @@ RUN apt-get update && apt-get install -y \
 # Copy the requirements file first to leverage Docker caching
 COPY requirements.txt .
 
-# Upgrade pip and install dependencies.
-# Adding the --root-user-action=ignore flag suppresses the pip warning.
+# Upgrade pip, setuptools, and wheel, and force-install numpy first
 RUN pip install --upgrade pip setuptools wheel --root-user-action=ignore && \
-    pip install --no-cache-dir -r requirements.txt --root-user-action=ignore
+    pip install numpy==1.23.5 --root-user-action=ignore
+
+# Now install the rest of the dependencies
+RUN pip install --no-cache-dir -r requirements.txt --root-user-action=ignore
 
 # Copy the rest of your application code into the container
 COPY . .
 
-# Expose port 5000 (adjust if needed)
+# Expose the port your app runs on
 EXPOSE 5000
 
 # Define the command to run your API using gunicorn
