@@ -1,6 +1,7 @@
 import librosa
 import librosa.filters
 import numpy as np
+np.complex = complex
 from scipy import signal
 from scipy.io import wavfile
 import soundfile as sf
