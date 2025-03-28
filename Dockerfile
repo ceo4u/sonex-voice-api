@@ -4,10 +4,14 @@ FROM python:3.11.9-slim
 # Set the working directory inside the container
 WORKDIR /app
 
-# Install build dependencies (including gcc and other essential tools)
-RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*
+# Install build dependencies and additional libraries for numpy
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libatlas-base-dev \
+    gfortran \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy the requirements file into the container first to leverage Docker caching
+# Copy the requirements file first so that Docker can cache the pip install step
 COPY requirements.txt .
 
 # Upgrade pip and install dependencies from requirements.txt
