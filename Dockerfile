@@ -4,24 +4,27 @@ FROM python:3.11.9-slim
 # Set the working directory inside the container
 WORKDIR /app
 
-# Install build dependencies and additional libraries for numpy
+# Install system dependencies for building numpy and other packages
 RUN apt-get update && apt-get install -y \
     build-essential \
     libatlas-base-dev \
+    libopenblas-dev \
+    liblapack-dev \
     gfortran \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the requirements file first so that Docker can cache the pip install step
+# Copy the requirements file first to leverage Docker caching
 COPY requirements.txt .
 
-# Upgrade pip and install dependencies from requirements.txt
-RUN pip install --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt
+# Upgrade pip and install dependencies.
+# Adding the --root-user-action=ignore flag suppresses the pip warning.
+RUN pip install --upgrade pip setuptools wheel --root-user-action=ignore && \
+    pip install --no-cache-dir -r requirements.txt --root-user-action=ignore
 
 # Copy the rest of your application code into the container
 COPY . .
 
-# Expose the port your app runs on
+# Expose port 5000 (adjust if needed)
 EXPOSE 5000
 
 # Define the command to run your API using gunicorn
