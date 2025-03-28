@@ -4,10 +4,10 @@ FROM python:3.11.9-slim
 # Set the working directory
 WORKDIR /app
 
-# Copy requirements first to leverage Docker caching
+# Copy requirements first
 COPY requirements.txt .
 
-# Install system dependencies, build Python packages, then remove build tools
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     libatlas-base-dev \
@@ -21,14 +21,12 @@ RUN apt-get update && apt-get install -y \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the rest of the application
+# Copy ALL files (including config)
 COPY . .
 
-# Use Render's PORT environment variable (default to 5000)
+# Use Render's PORT variable
 ENV PORT=5000
 EXPOSE $PORT
 
-# Start Gunicorn with config file and dynamic port
-CMD gunicorn api:app \
-    --config gunicorn.conf.py \
-    --bind 0.0.0.0:$PORT
+# Start Gunicorn with config file
+CMD ["gunicorn", "api:app", "--config", "gunicorn.conf.py", "--bind", "0.0.0.0:$PORT"]
