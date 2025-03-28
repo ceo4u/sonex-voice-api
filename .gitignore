@@ -13,7 +13,7 @@ __pycache__/
 
 # Models and audio files
 models.zip
-saved_models/
+
 *.pt
 *.pth
 *.bin
