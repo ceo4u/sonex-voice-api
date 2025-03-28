@@ -25,11 +25,8 @@ class Synthesizer:
         self.model_fpath = model_fpath
         self.verbose = verbose
 
-        # Check for GPU
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
+        # Force CPU usage (Render compatibility)
+        self.device = torch.device("cpu")
         if self.verbose:
             print("Synthesizer using device:", self.device)
 
