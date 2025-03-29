@@ -12,30 +12,30 @@ class Encoder:
         # Force CPU usage by explicitly setting the device to CPU
         self.device = torch.device("cpu")
         try:
-            # First try loading as a TorchScript model with CPU mapping
+            # First try loading as TorchScript model, mapping to CPU
             self.model = torch.jit.load(model_path, map_location=self.device)
         except RuntimeError:
-            # If that fails, load as a regular PyTorch model on CPU
+            # If that fails, load as regular PyTorch model on CPU
             self.model = SpeakerEncoder(self.device, self.device)
             checkpoint = torch.load(model_path, map_location=self.device)
             self.model.load_state_dict(checkpoint["model_state"])
         self.model.eval()
         
     def embed_utterance(self, wav):
-        # Ensure input is on CPU if it's not already
+        # Ensure that the input is on CPU if it's a tensor
         if isinstance(wav, torch.Tensor):
             wav = wav.to(self.device)
         return self.model(wav)
 
 # Global variables for lazy loading
 _model = None  # type: SpeakerEncoder
-_device = torch.device("cpu")  # Force CPU usage
+_device = torch.device("cpu")  # Force CPU
 
 def load_model(weights_fpath: Path, device=None):
     """
-    Loads the model into memory. If not explicitly called, it will run on the first call to embed_frames().
-    :param weights_fpath: Path to saved model weights.
-    :param device: Ignored here since we force CPU usage.
+    Loads the model in memory.
+    :param weights_fpath: the path to saved model weights.
+    :param device: This parameter is ignored; CPU is forced.
     """
     global _model, _device
     _device = torch.device("cpu")  # Always use CPU
