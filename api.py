@@ -59,7 +59,7 @@ def health():
     return jsonify({"status": "ok"})
 
 # Voice cloning endpoint
-@app.route("/api/clone-voice", methods=["POST"])
+@app.route('/api/clone-voice', methods=['POST'])
 def clone_voice():
     try:
         if 'audio' not in request.files or 'text' not in request.form:
@@ -73,10 +73,9 @@ def clone_voice():
             audio_file.save(temp_audio.name)
             temp_audio_path = temp_audio.name
 
-       # Process the audio file using the provided preprocessing function
-       wav = preprocess_wav(temp_audio_path)
-       os.unlink(temp_audio_path)  # Clean up temporary file
-
+        # Process the audio file using the preprocess_wav function
+        wav = preprocess_wav(temp_audio_path)
+        os.unlink(temp_audio_path)  # Clean up temporary file
 
         # Generate embeddings
         embeddings = encoder_model.embed_utterance(wav)
