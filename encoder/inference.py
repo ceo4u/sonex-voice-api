@@ -22,9 +22,11 @@ class Encoder:
         self.model.eval()
         
     def embed_utterance(self, wav):
-        # Ensure that the input is on CPU if it's a tensor
-        if isinstance(wav, torch.Tensor):
-            wav = wav.to(self.device)
+        # If wav is a NumPy array, convert it to a tensor with a batch dimension
+        if isinstance(wav, np.ndarray):
+            wav = torch.from_numpy(wav).float().unsqueeze(0)
+        # Move the tensor to CPU
+        wav = wav.to(self.device)
         return self.model(wav)
 
 # Global variables for lazy loading
@@ -33,7 +35,9 @@ _device = torch.device("cpu")  # Force CPU
 
 def load_model(weights_fpath: Path, device=None):
     """
-    Loads the model in memory.
+    Loads the model in memory. If this function is not explicitly called, it will be run on the
+    first call to embed_frames() with the default weights file.
+
     :param weights_fpath: the path to saved model weights.
     :param device: This parameter is ignored; CPU is forced.
     """
@@ -51,6 +55,7 @@ def is_loaded():
 def embed_frames_batch(frames_batch):
     """
     Computes embeddings for a batch of mel spectrograms.
+
     :param frames_batch: numpy array of float32 of shape (batch_size, n_frames, n_channels)
     :return: numpy array of float32 of shape (batch_size, model_embedding_size)
     """
@@ -62,6 +67,10 @@ def embed_frames_batch(frames_batch):
 
 def compute_partial_slices(n_samples, partial_utterance_n_frames=partials_n_frames,
                            min_pad_coverage=0.75, overlap=0.5):
+    """
+    Computes where to split an utterance waveform and its corresponding mel spectrogram to obtain
+    partial utterances of <partial_utterance_n_frames> each.
+    """
     assert 0 <= overlap < 1
     assert 0 < min_pad_coverage <= 1
 
@@ -86,6 +95,9 @@ def compute_partial_slices(n_samples, partial_utterance_n_frames=partials_n_fram
     return wav_slices, mel_slices
 
 def embed_utterance(wav, using_partials=True, return_partials=False, **kwargs):
+    """
+    Computes an embedding for a single utterance.
+    """
     if not using_partials:
         frames = audio.wav_to_mel_spectrogram(wav)
         embed = embed_frames_batch(frames[None, ...])[0]
