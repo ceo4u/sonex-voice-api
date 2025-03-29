@@ -73,9 +73,10 @@ def clone_voice():
             audio_file.save(temp_audio.name)
             temp_audio_path = temp_audio.name
 
-        # Process the audio file (resample to 22050 Hz)
-        wav = librosa.load(temp_audio_path, sr=22050)[0]
-        os.unlink(temp_audio_path)  # Clean up temporary file
+       # Process the audio file using the provided preprocessing function
+       wav = preprocess_wav(temp_audio_path)
+       os.unlink(temp_audio_path)  # Clean up temporary file
+
 
         # Generate embeddings
         embeddings = encoder_model.embed_utterance(wav)
