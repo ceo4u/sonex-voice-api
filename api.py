@@ -63,7 +63,7 @@ def health_check():
     return jsonify({"status": "ok"})
 
 # Voice cloning endpoint
-@app.route("/api/clone-voice", methods=["POST"])
+@app.route('/api/clone-voice', methods=['POST'])
 def clone_voice():
     try:
         if 'audio' not in request.files or 'text' not in request.form:
@@ -77,14 +77,21 @@ def clone_voice():
             audio_file.save(temp_audio.name)
             temp_audio_path = temp_audio.name
 
-        # Process the audio file using the preprocess_wav function
-        wav = preprocess_wav(temp_audio_path)
+        # Load waveform and convert to mel spectrogram with 40 mel bins
+        waveform, sr = librosa.load(temp_audio_path, sr=22050)
+        # Compute mel spectrogram with n_mels=40
+        mel_spec = librosa.feature.melspectrogram(y=waveform, sr=sr, n_mels=40)
+        # Convert power spectrogram to decibel (dB) scale
+        mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
+        # Transpose so the shape is (n_frames, 40) as expected by the model
+        processed_input = mel_spec_db.T
+
         os.unlink(temp_audio_path)  # Clean up temporary file
 
-        # Generate embeddings
-        embeddings = encoder_model.embed_utterance(wav)
+        # Generate embeddings using the processed mel spectrogram
+        embeddings = encoder_model.embed_utterance(processed_input)
 
-        # Generate spectrogram
+        # Generate spectrogram from text and embeddings
         specs = synthesizer_model.synthesize_spectrograms([text], [embeddings])
 
         # Generate waveform using the vocoder model
