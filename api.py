@@ -9,17 +9,17 @@ import gdown
 import tempfile
 import librosa
 import soundfile as sf
-from pathlib import Path
+from pathlib import Path  # Added here
 
 # Add the Real-Time-Voice-Cloning directory to the Python path
 RTVC_DIR = os.path.join(os.path.dirname(__file__), "Real-Time-Voice-Cloning")
 sys.path.append(RTVC_DIR)
 
 # Import the required modules from your RTVC repository
-from encoder import inference as encoder
+from encoder.inference import Encoder
 from synthesizer.inference import Synthesizer
 import vocoder.inference as vocoder
-from encoder.audio import preprocess_wav
+from encoder.audio import preprocess_wav  # Added this line
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -48,7 +48,8 @@ download_models()
 # Initialize models (force CPU usage)
 print("Loading models...")
 device = "cpu"
-encoder.load_model(os.path.join("saved_models", "default", "encoder.pt"))
+# Update the call to pass a Path object
+encoder_model = Encoder(Path(os.path.join("saved_models", "default", "encoder.pt")))
 synthesizer_model = Synthesizer(os.path.join("saved_models", "default", "synthesizer.pt"))
 vocoder.load_model(os.path.join("saved_models", "default", "vocoder.pt"))
 print("Models loaded successfully!")
@@ -78,12 +79,16 @@ def clone_voice():
             audio_file.save(temp_audio.name)
             temp_audio_path = temp_audio.name
 
-        # Process the audio file
-        wav = preprocess_wav(Path(temp_audio_path))
+        # Load waveform and convert to mel spectrogram with 40 mel bins
+        waveform, sr = librosa.load(temp_audio_path, sr=22050)
+        mel_spec = librosa.feature.melspectrogram(y=waveform, sr=sr, n_mels=40)
+        mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
+        processed_input = mel_spec_db.T
+
         os.unlink(temp_audio_path)  # Clean up temporary file
 
-        # Generate embeddings using the encoder model
-        embeddings = encoder.embed_utterance(wav)
+        # Generate embeddings using the processed mel spectrogram
+        embeddings = encoder_model.embed_utterance(processed_input)
 
         # Generate spectrogram from text and embeddings
         specs = synthesizer_model.synthesize_spectrograms([text], [embeddings])
