@@ -9,7 +9,8 @@ import gdown
 import tempfile
 import librosa
 import soundfile as sf
-from pathlib import Path  # Ensure Path is imported
+from pathlib import Path
+from pydub import AudioSegment  # For audio conversion
 
 # Add the Real-Time-Voice-Cloning directory to the Python path
 RTVC_DIR = os.path.join(os.path.dirname(__file__), "Real-Time-Voice-Cloning")
@@ -47,10 +48,9 @@ download_models()
 
 # Initialize models (force CPU usage)
 print("Loading models...")
-# Use the Encoder constructor and pass a Path object for the encoder model file.
+device = "cpu"
 encoder_model = Encoder(Path(os.path.join("saved_models", "default", "encoder.pt")))
 synthesizer_model = Synthesizer(os.path.join("saved_models", "default", "synthesizer.pt"))
-# If you need to load the vocoder with its load_model function, pass a Path object:
 vocoder.load_model(Path(os.path.join("saved_models", "default", "vocoder.pt")))
 print("Models loaded successfully!")
 
@@ -75,19 +75,23 @@ def clone_voice():
         text = request.form['text']
 
         # Save the uploaded audio file temporarily
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_audio:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(audio_file.filename)[1]) as temp_audio:
             audio_file.save(temp_audio.name)
             temp_audio_path = temp_audio.name
 
+        # Check file extension and convert to WAV if necessary
+        file_ext = os.path.splitext(temp_audio_path)[1].lower()
+        if file_ext != '.wav':
+            # Convert file to WAV using pydub
+            converted_path = temp_audio_path.rsplit('.', 1)[0] + ".wav"
+            audio_segment = AudioSegment.from_file(temp_audio_path)
+            audio_segment.export(converted_path, format="wav")
+            os.unlink(temp_audio_path)  # Remove original file
+            temp_audio_path = converted_path
+
         # Process the audio file using the preprocess_wav function
-        from pathlib import Path  # Ensure Path is imported
         wav = preprocess_wav(Path(temp_audio_path))
         os.unlink(temp_audio_path)  # Clean up temporary file
-
-        # Load waveform and convert to mel spectrogram with 40 mel bins
-        waveform, sr = librosa.load(temp_audio_path, sr=22050)  # You might not need this line anymore if preprocess_wav returns what you need
-        # Instead, if preprocess_wav returns the processed mel spectrogram, use that output directly:
-        # For example: processed_input = preprocess_wav(Path(temp_audio_path))
 
         # Generate embeddings using the processed mel spectrogram
         embeddings = encoder_model.embed_utterance(wav)
