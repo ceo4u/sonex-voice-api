@@ -64,6 +64,7 @@ def home():
 def health_check():
     return jsonify({"status": "ok"})
 
+
 # Voice cloning endpoint
 @app.route('/api/clone-voice', methods=['POST'])
 def clone_voice():
@@ -75,28 +76,23 @@ def clone_voice():
         text = request.form['text']
 
         # Save the uploaded audio file temporarily
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(audio_file.filename)[1]) as temp_audio:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_audio:
             audio_file.save(temp_audio.name)
             temp_audio_path = temp_audio.name
 
-        # Check file extension and convert to WAV if necessary
-        file_ext = os.path.splitext(temp_audio_path)[1].lower()
-        if file_ext != '.wav':
-            # Convert file to WAV using pydub
-            converted_path = temp_audio_path.rsplit('.', 1)[0] + ".wav"
-            audio_segment = AudioSegment.from_file(temp_audio_path)
-            audio_segment.export(converted_path, format="wav")
-            os.unlink(temp_audio_path)  # Remove original file
-            temp_audio_path = converted_path
+        # Simply load the raw waveform
+        # If the file is WAV, you can do something like:
+        import librosa
+        import numpy as np
+        waveform, _ = librosa.load(temp_audio_path, sr=22050)
 
-        # Process the audio file using the preprocess_wav function
-        wav = preprocess_wav(Path(temp_audio_path))
-        os.unlink(temp_audio_path)  # Clean up temporary file
+        # Clean up temporary file
+        os.unlink(temp_audio_path)
 
-        # Generate embeddings using the processed mel spectrogram
-        embeddings = encoder_model.embed_utterance(wav)
+        # Now pass the raw waveform to embed_utterance
+        embeddings = encoder_model.embed_utterance(waveform)
 
-        # Generate spectrogram from text and embeddings
+        # Generate spectrogram from text + embeddings
         specs = synthesizer_model.synthesize_spectrograms([text], [embeddings])
 
         # Generate waveform using the vocoder model
