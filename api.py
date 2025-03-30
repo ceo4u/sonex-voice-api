@@ -79,16 +79,18 @@ def clone_voice():
             audio_file.save(temp_audio.name)
             temp_audio_path = temp_audio.name
 
-        # Load waveform and convert to mel spectrogram with 40 mel bins
-        waveform, sr = librosa.load(temp_audio_path, sr=22050)
-        mel_spec = librosa.feature.melspectrogram(y=waveform, sr=sr, n_mels=40)
-        mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
-        processed_input = mel_spec_db.T  # Shape: (n_frames, 40)
-
+        # Process the audio file using the preprocess_wav function
+        from pathlib import Path  # Ensure Path is imported
+        wav = preprocess_wav(Path(temp_audio_path))
         os.unlink(temp_audio_path)  # Clean up temporary file
 
+        # Load waveform and convert to mel spectrogram with 40 mel bins
+        waveform, sr = librosa.load(temp_audio_path, sr=22050)  # You might not need this line anymore if preprocess_wav returns what you need
+        # Instead, if preprocess_wav returns the processed mel spectrogram, use that output directly:
+        # For example: processed_input = preprocess_wav(Path(temp_audio_path))
+
         # Generate embeddings using the processed mel spectrogram
-        embeddings = encoder_model.embed_utterance(processed_input)
+        embeddings = encoder_model.embed_utterance(wav)
 
         # Generate spectrogram from text and embeddings
         specs = synthesizer_model.synthesize_spectrograms([text], [embeddings])
