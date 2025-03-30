@@ -11,6 +11,7 @@ import librosa
 import soundfile as sf
 from pathlib import Path
 from pydub import AudioSegment  # For audio conversion
+from encoder.audio import preprocess_wav
 
 # Add the Real-Time-Voice-Cloning directory to the Python path
 RTVC_DIR = os.path.join(os.path.dirname(__file__), "Real-Time-Voice-Cloning")
@@ -80,17 +81,17 @@ def clone_voice():
             audio_file.save(temp_audio.name)
             temp_audio_path = temp_audio.name
 
-        # Simply load the raw waveform
-        # If the file is WAV, you can do something like:
-        import librosa
-        import numpy as np
-        waveform, _ = librosa.load(temp_audio_path, sr=22050)
+        # Preprocess audio using encoder's preprocessing
+        from encoder.audio import preprocess_wav
+
+        # Get preprocessed waveform (resampled to 16kHz, trimmed, normalized)
+        wav = preprocess_wav(temp_audio_path)
 
         # Clean up temporary file
         os.unlink(temp_audio_path)
 
-        # Now pass the raw waveform to embed_utterance
-        embeddings = encoder_model.embed_utterance(waveform)
+        # Generate embeddings from preprocessed waveform
+        embeddings = encoder_model.embed_utterance(wav)
 
         # Generate spectrogram from text + embeddings
         specs = synthesizer_model.synthesize_spectrograms([text], [embeddings])
