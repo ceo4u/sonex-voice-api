@@ -4,13 +4,14 @@ FROM python:3.11.9-slim
 # Set the working directory inside the container
 WORKDIR /app
 
-# Install system dependencies needed for numpy and other packages
+# Install system dependencies (build tools and ffmpeg for pydub)
 RUN apt-get update && apt-get install -y \
     build-essential \
     libatlas-base-dev \
     libopenblas-dev \
     liblapack-dev \
     gfortran \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file first to leverage Docker caching
@@ -23,8 +24,8 @@ RUN pip install --upgrade pip setuptools wheel --root-user-action=ignore && \
 # Copy the rest of the application code
 COPY . .
 
-# Expose port 5000 (this is the default; Render will override with its own PORT)
+# Expose port 5000 (Render will override this with its own PORT environment variable)
 EXPOSE 5000
 
-# Use shell substitution to bind gunicorn to the PORT provided by Render (default 5000 if not set)
+# Bind Gunicorn to the port provided by Render (default to 5000 if PORT is not set)
 CMD ["sh", "-c", "gunicorn api:app --bind 0.0.0.0:${PORT:-5000}"]
