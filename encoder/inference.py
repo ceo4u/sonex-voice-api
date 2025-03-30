@@ -25,7 +25,7 @@ class Encoder:
         # If wav is a NumPy array, convert it to a tensor with a batch dimension
         if isinstance(wav, np.ndarray):
             wav = torch.from_numpy(wav).float().unsqueeze(0)
-        # Move the tensor to CPU
+        # Ensure the tensor is on CPU
         wav = wav.to(self.device)
         return self.model(wav)
 
@@ -35,10 +35,10 @@ _device = torch.device("cpu")  # Force CPU
 
 def load_model(weights_fpath: Path, device=None):
     """
-    Loads the model in memory. If this function is not explicitly called, it will be run on the
-    first call to embed_frames() with the default weights file.
-
-    :param weights_fpath: the path to saved model weights.
+    Loads the model in memory. If not explicitly called, it will be run on the first call to embed_frames()
+    with the default weights file.
+    
+    :param weights_fpath: The path to saved model weights.
     :param device: This parameter is ignored; CPU is forced.
     """
     global _model, _device
@@ -47,6 +47,7 @@ def load_model(weights_fpath: Path, device=None):
     checkpoint = torch.load(weights_fpath, map_location=_device)
     _model.load_state_dict(checkpoint["model_state"])
     _model.eval()
+    # Use weights_fpath.name by ensuring weights_fpath is a Path object
     print("Loaded encoder \"%s\" trained to step %d" % (weights_fpath.name, checkpoint["step"]))
 
 def is_loaded():
@@ -55,7 +56,7 @@ def is_loaded():
 def embed_frames_batch(frames_batch):
     """
     Computes embeddings for a batch of mel spectrograms.
-
+    
     :param frames_batch: numpy array of float32 of shape (batch_size, n_frames, n_channels)
     :return: numpy array of float32 of shape (batch_size, model_embedding_size)
     """
