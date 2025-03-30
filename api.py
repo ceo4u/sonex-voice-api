@@ -9,7 +9,7 @@ import gdown
 import tempfile
 import librosa
 import soundfile as sf
-from pathlib import Path  # Added here
+from pathlib import Path  # Ensure Path is imported
 
 # Add the Real-Time-Voice-Cloning directory to the Python path
 RTVC_DIR = os.path.join(os.path.dirname(__file__), "Real-Time-Voice-Cloning")
@@ -19,7 +19,7 @@ sys.path.append(RTVC_DIR)
 from encoder.inference import Encoder
 from synthesizer.inference import Synthesizer
 import vocoder.inference as vocoder
-from encoder.audio import preprocess_wav  # Added this line
+from encoder.audio import preprocess_wav
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -47,11 +47,11 @@ download_models()
 
 # Initialize models (force CPU usage)
 print("Loading models...")
-device = "cpu"
-# Update the call to pass a Path object
+# Use the Encoder constructor and pass a Path object for the encoder model file.
 encoder_model = Encoder(Path(os.path.join("saved_models", "default", "encoder.pt")))
 synthesizer_model = Synthesizer(os.path.join("saved_models", "default", "synthesizer.pt"))
-vocoder.load_model(os.path.join("saved_models", "default", "vocoder.pt"))
+# If you need to load the vocoder with its load_model function, pass a Path object:
+vocoder.load_model(Path(os.path.join("saved_models", "default", "vocoder.pt")))
 print("Models loaded successfully!")
 
 # Root endpoint
@@ -83,7 +83,7 @@ def clone_voice():
         waveform, sr = librosa.load(temp_audio_path, sr=22050)
         mel_spec = librosa.feature.melspectrogram(y=waveform, sr=sr, n_mels=40)
         mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
-        processed_input = mel_spec_db.T
+        processed_input = mel_spec_db.T  # Shape: (n_frames, 40)
 
         os.unlink(temp_audio_path)  # Clean up temporary file
 
