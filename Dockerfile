@@ -8,6 +8,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     build-essential \
     ffmpeg \
+    python3-dev \
+    gcc \
     libavcodec-dev \
     libavformat-dev \
     libswscale-dev \
