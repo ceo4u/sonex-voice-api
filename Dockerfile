@@ -4,7 +4,7 @@ FROM python:3.11.9-slim
 # Set the working directory inside the container
 WORKDIR /app
 
-# Install system dependencies (build tools and ffmpeg for pydub)
+# Install system dependencies (essential build tools and audio libraries)
 RUN apt-get update && apt-get install -y \
     build-essential \
     libatlas-base-dev \
@@ -14,18 +14,19 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the requirements file first to leverage Docker caching
+# Copy requirements first to leverage Docker cache
 COPY requirements.txt .
 
-# Upgrade pip and install dependencies
-RUN pip install --upgrade pip setuptools wheel --root-user-action=ignore && \
-    pip install --no-cache-dir -r requirements.txt --root-user-action=ignore
+# Install Python dependencies with explicit Gunicorn installation
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir gunicorn==21.2.0
 
-# Copy the rest of the application code
+# Copy application code
 COPY . .
 
-# Expose port 5000 (Render will override this with its own PORT environment variable)
+# Expose port (Render will use $PORT environment variable)
 EXPOSE 5000
 
-# Bind Gunicorn to the port provided by Render (default to 5000 if PORT is not set)
-CMD ["sh", "-c", "gunicorn api:app --bind 0.0.0.0:${PORT:-5000}"]
+# Production server command with timeout and worker configuration
+CMD ["gunicorn", "api:app", "--bind", "0.0.0.0:5000", "--timeout", "120", "--workers", "4", "--worker-class", "sync"]
