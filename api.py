@@ -109,7 +109,14 @@ def clone_voice():
         generated_wav = vocoder.infer_waveform(specs[0])
         print(f"Generated waveform: {len(generated_wav)} samples ({len(generated_wav)/22050:.2f} seconds at 22.05kHz)")
 
-        def process_voice_cloning(generated_wav):
+        return process_voice_cloning(generated_wav)
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
+
+def process_voice_cloning(generated_wav):
     try:
         # Save output
         output_filename = f"generated_{os.urandom(4).hex()}.wav"
@@ -125,9 +132,8 @@ def clone_voice():
     
     except Exception as e:
         import traceback
-        traceback.print_exc()  
-        return jsonify({"error": f"Processing failed: {str(e)}"}), 500
-
+        traceback.print_exc()
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
