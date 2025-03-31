@@ -21,7 +21,7 @@ from encoder.inference import Encoder
 from synthesizer.inference import Synthesizer
 import vocoder.inference as vocoder
 from encoder.audio import preprocess_wav
-from synthesizer.audio import Audio
+from synthesizer.hparams import audio as Audio 
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -86,7 +86,15 @@ def clone_voice():
         print(f"Saved temp audio at: {temp_audio_path}")
 
         # Convert and preprocess audio
-        audio_processor = Audio()
+        audio_processor = Audio(
+        sampling_rate=SAMPLE_RATE,
+        n_mels=N_MELS,
+        hop_length=HOP_LENGTH,
+        win_length=1024,  # Add if needed
+        mel_fmin=0,
+        mel_fmax=8000
+        )
+
         wav = preprocess_wav(temp_audio_path)
         mel_spectrogram = audio_processor.melspectrogram(wav)
         print(f"Mel Spectrogram Shape: {mel_spectrogram.shape}")
