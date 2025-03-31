@@ -70,40 +70,51 @@ def health_check():
 @app.route('/api/clone-voice', methods=['POST'])
 def clone_voice():
     try:
+        print("\n=== New Request Received ===")
+        
         if 'audio' not in request.files or 'text' not in request.form:
             return jsonify({"error": "Missing audio file or text"}), 400
 
         audio_file = request.files['audio']
         text = request.form['text']
+        print(f"Input received - Text: '{text}', Audio: {audio_file.filename}")
 
         # Save the uploaded audio file temporarily
         with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_audio:
             audio_file.save(temp_audio.name)
             temp_audio_path = temp_audio.name
+            print(f"Temporary audio saved to: {temp_audio_path}")
 
-        # Preprocess audio using encoder's preprocessing
-        from encoder.audio import preprocess_wav
-
-        # Get preprocessed waveform (resampled to 16kHz, trimmed, normalized)
+        # Preprocess audio
+        print("\n1. Preprocessing audio...")
         wav = preprocess_wav(temp_audio_path)
+        print(f"Preprocessed waveform: {len(wav)} samples ({len(wav)/16000:.2f} seconds at 16kHz)")
 
         # Clean up temporary file
         os.unlink(temp_audio_path)
+        print("Cleaned up temporary file")
 
-        # Generate embeddings from preprocessed waveform
+        # Generate embeddings
+        print("\n2. Generating embeddings...")
         embeddings = encoder_model.embed_utterance(wav)
+        print(f"Embeddings shape: {embeddings.shape}")
 
-        # Generate spectrogram from text + embeddings
+        # Generate spectrogram
+        print("\n3. Synthesizing spectrograms...")
         specs = synthesizer_model.synthesize_spectrograms([text], [embeddings])
+        print(f"Synthesized spectrogram shape: {specs[0].shape}")
 
-        # Generate waveform using the vocoder model
+        # Generate waveform
+        print("\n4. Generating waveform...")
         generated_wav = vocoder.infer_waveform(specs[0])
+        print(f"Generated waveform: {len(generated_wav)} samples ({len(generated_wav)/22050:.2f} seconds at 22.05kHz)")
 
-        # Save the generated audio file
+        # Save output
         output_filename = f"generated_{os.urandom(4).hex()}.wav"
         output_path = os.path.join("generated_audio", output_filename)
         os.makedirs("generated_audio", exist_ok=True)
         sf.write(output_path, generated_wav, 22050)
+        print(f"\nOutput saved to: {output_path}")
 
         return jsonify({
             "message": "Voice cloning successful",
@@ -111,20 +122,10 @@ def clone_voice():
         })
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"\n!!! Error: {str(e)}")
+        return jsonify({"error": str(e)}), 500 
 
-# Download endpoint
-@app.route("/api/download/<filename>", methods=["GET"])
-def download_file(filename):
-    try:
-        return send_file(
-            os.path.join("generated_audio", filename),
-            as_attachment=True,
-            download_name=filename
-        )
-    except Exception as e:
-        return jsonify({"error": str(e)}), 404
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, debug=True)  # Add debug=True
