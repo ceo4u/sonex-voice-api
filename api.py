@@ -1,32 +1,31 @@
 import numpy as np
-np.bool = bool
+np.bool = bool  # Fix numpy deprecation warning
 
-from flask import Flask, request, send_file, jsonify
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
 import sys
 import gdown
 import tempfile
-import librosa
 import soundfile as sf
 from pathlib import Path
-from pydub import AudioSegment  # For audio conversion
-from encoder.audio import preprocess_wav
+from pydub import AudioSegment
+from functools import lru_cache
 
-# Add the Real-Time-Voice-Cloning directory to the Python path
+# Add Real-Time-Voice-Cloning to the path
 RTVC_DIR = os.path.join(os.path.dirname(__file__), "Real-Time-Voice-Cloning")
 sys.path.append(RTVC_DIR)
 
-# Import the required modules from your RTVC repository
+# Import cloning models
 from encoder.inference import Encoder
 from synthesizer.inference import Synthesizer
 import vocoder.inference as vocoder
 from encoder.audio import preprocess_wav
+from synthesizer.audio import Audio
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Model URLs (replace with your actual URLs)
 MODEL_URLS = {
     "encoder": "https://media.githubusercontent.com/media/ceo4u/sonex-voice-api/main/saved_models/default/encoder.pt",
     "synthesizer": "https://media.githubusercontent.com/media/ceo4u/sonex-voice-api/main/saved_models/default/synthesizer.pt",
@@ -44,86 +43,81 @@ def download_models():
             print(f"Downloading {model_name} model...")
             gdown.download(model_url, model_path, quiet=False, fuzzy=True)
 
-# Download models if necessary
 download_models()
 
-# Initialize models (force CPU usage)
+# Load models (CPU mode for compatibility)
 print("Loading models...")
 device = "cpu"
 encoder_model = Encoder(Path(os.path.join("saved_models", "default", "encoder.pt")))
-synthesizer_model = Synthesizer(os.path.join("saved_models", "default", "synthesizer.pt"))
+synthesizer_model = Synthesizer(
+    os.path.join("saved_models", "default", "synthesizer.pt"),
+    sample_rate=16000, hparams={"n_mels": 40}  # Ensure correct feature dimensions
+)
 vocoder.load_model(Path(os.path.join("saved_models", "default", "vocoder.pt")))
 print("Models loaded successfully!")
 
-# Root endpoint
 @app.route("/", methods=["GET"])
 def home():
     return "Voice Cloning API is running!"
 
-# Health check endpoint
 @app.route("/health", methods=["GET"])
 def health_check():
     return jsonify({"status": "ok"})
 
+@lru_cache(maxsize=100)
+def clone_voice_cached(text, audio_hash):
+    """Cached version of voice cloning to optimize speed."""
+    return clone_voice_processing(text, audio_hash)
 
-# Voice cloning endpoint
 @app.route('/api/clone-voice', methods=['POST'])
 def clone_voice():
     try:
-        print("\n=== New Request Received ===")
-        
         if 'audio' not in request.files or 'text' not in request.form:
             return jsonify({"error": "Missing audio file or text"}), 400
 
         audio_file = request.files['audio']
         text = request.form['text']
-        print(f"Input received - Text: '{text}', Audio: {audio_file.filename}")
+        print(f"Processing request - Text: '{text}', Audio: {audio_file.filename}")
 
-        # Save the uploaded audio file temporarily
         with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_audio:
             audio_file.save(temp_audio.name)
             temp_audio_path = temp_audio.name
-            print(f"Temporary audio saved to: {temp_audio_path}")
-
-        # Preprocess audio
-        print("\n1. Preprocessing audio...")
-        wav = preprocess_wav(temp_audio_path)
-        print(f"Preprocessed waveform: {len(wav)} samples ({len(wav)/16000:.2f} seconds at 16kHz)")
-
-        # Clean up temporary file
-        os.unlink(temp_audio_path)
-        print("Cleaned up temporary file")
-
-        # Generate embeddings
-        print("\n2. Generating embeddings...")
-        embeddings = encoder_model.embed_utterance(wav)
-        print(f"Embeddings shape: {embeddings.shape}")
-
-        # Generate spectrogram
-        print("\n3. Synthesizing spectrograms...")
-        specs = synthesizer_model.synthesize_spectrograms([text], [embeddings])
-        print(f"Synthesized spectrogram shape: {specs[0].shape}")
-
-        # Generate waveform
-        print("\n4. Generating waveform...")
-        generated_wav = vocoder.infer_waveform(specs[0])
-        print(f"Generated waveform: {len(generated_wav)} samples ({len(generated_wav)/22050:.2f} seconds at 22.05kHz)")
-
-        return process_voice_cloning(generated_wav)
         
+        print(f"Saved temp audio at: {temp_audio_path}")
+
+        # Convert and preprocess audio
+        audio_processor = Audio()
+        wav = preprocess_wav(temp_audio_path)
+        mel_spectrogram = audio_processor.melspectrogram(wav)
+        print(f"Mel Spectrogram Shape: {mel_spectrogram.shape}")
+
+        # Clean up
+        os.unlink(temp_audio_path)
+
+        return clone_voice_processing(text, wav)
+
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"Server error: {str(e)}"}), 500
 
-def process_voice_cloning(generated_wav):
+def clone_voice_processing(text, wav):
     try:
-        # Save output
+        embeddings = encoder_model.embed_utterance(wav)
+        print(f"Embeddings shape: {embeddings.shape}")
+
+        specs = synthesizer_model.synthesize_spectrograms([text], [embeddings], styles=[None])
+        print(f"Synthesized spectrogram shape: {specs[0].shape}")
+
+        generated_wav = vocoder.infer_waveform(specs[0])
+        print(f"Generated waveform length: {len(generated_wav)}")
+
         output_filename = f"generated_{os.urandom(4).hex()}.wav"
         output_path = os.path.join("generated_audio", output_filename)
         os.makedirs("generated_audio", exist_ok=True)
         sf.write(output_path, generated_wav, 22050)
-        print(f"\nOutput saved to: {output_path}")
+        
+        print(f"Output saved to: {output_path}")
 
         return jsonify({
             "message": "Voice cloning successful",
@@ -140,6 +134,6 @@ if __name__ == '__main__':
     app.run(
         host="0.0.0.0",
         port=port,
-        debug=True,  # Keep debug for error pages
-        use_reloader=False  # Disable automatic restarts
+        debug=True,
+        use_reloader=False
     )
