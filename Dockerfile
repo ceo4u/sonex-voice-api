@@ -7,11 +7,14 @@ WORKDIR /app
 # Install system dependencies (essential build tools and audio libraries)
 RUN apt-get update && apt-get install -y \
     build-essential \
+    ffmpeg \
+    libavcodec-dev \
+    libavformat-dev \
+    libswscale-dev \
     libatlas-base-dev \
     libopenblas-dev \
     liblapack-dev \
     gfortran \
-    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first to leverage Docker cache
