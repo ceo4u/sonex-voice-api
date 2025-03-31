@@ -121,9 +121,10 @@ def clone_voice():
             "filename": output_filename
         })
 
-    except Exception as e:
-        print(f"\n!!! Error: {str(e)}")
-        return jsonify({"error": str(e)}), 500 
+except Exception as e:
+    import traceback
+    traceback.print_exc()  
+    return jsonify({"error": f"Processing failed: {str(e)}"}), 500 
 
 
 if __name__ == '__main__':
