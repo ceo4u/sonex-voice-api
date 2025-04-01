@@ -8,6 +8,8 @@ import sys
 import gdown
 import tempfile
 import soundfile as sf
+from synthesizer.audio import Audio
+import traceback
 from pathlib import Path
 from pydub import AudioSegment
 from functools import lru_cache
@@ -21,7 +23,7 @@ from encoder.inference import Encoder
 from synthesizer.inference import Synthesizer
 import vocoder.inference as vocoder
 from encoder.audio import preprocess_wav
-from synthesizer.hparams import audio as Audio 
+from synthesizer.audio import Audio 
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -56,6 +58,16 @@ synthesizer_model = Synthesizer(
 vocoder.load_model(Path(os.path.join("saved_models", "default", "vocoder.pt")))
 print("Models loaded successfully!")
 
+# Initialize Audio Processor
+audio_processor = Audio(
+    sample_rate=16000,  # Must match your model's expected sample rate
+    n_mels=80,         # Number of mel bands (40 for some models)
+    n_fft=2048,        # FFT window size
+    hop_length=256,    # Frame shift
+    win_length=1024    # Window length
+)
+print("Audio processor initialized!")
+
 @app.route("/", methods=["GET"])
 def home():
     return "Voice Cloning API is running!"
@@ -84,6 +96,12 @@ def clone_voice():
             temp_audio_path = temp_audio.name
         
         print(f"Saved temp audio at: {temp_audio_path}")
+
+        # Process audio using the Audio class
+        wav = audio_processor.load_wav(temp_audio_path)
+        mel_spectrogram = audio_processor.melspectrogram(wav)
+        print(f"Processed audio with shape: {mel_spectrogram.shape}")
+        
 
         # Convert and preprocess audio
         audio_processor = Audio(

@@ -17,6 +17,10 @@ RUN apt-get update && apt-get install -y \
     libopenblas-dev \
     liblapack-dev \
     gfortran \
+    portaudio19-dev \
+    libportaudio2 \
+    libportaudiocpp0 \
+    libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first to leverage Docker cache
