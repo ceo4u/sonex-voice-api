@@ -1,41 +1,42 @@
-# Use the official Python 3.11.9 slim image as the base
-FROM python:3.11.9-slim
+# Use the official Python 3.11 slim image
+FROM python:3.11-slim
 
-# Set the working directory inside the container
+# Set working directory
 WORKDIR /app
 
-# Install system dependencies (essential build tools and audio libraries)
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     ffmpeg \
-    python3-dev \
-    gcc \
-    libavcodec-dev \
-    libavformat-dev \
-    libswscale-dev \
-    libatlas-base-dev \
-    libopenblas-dev \
-    liblapack-dev \
-    gfortran \
+    libsndfile1 \
     portaudio19-dev \
     libportaudio2 \
-    libportaudiocpp0 \
-    libsndfile1 \
+    libopenblas-dev \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first to leverage Docker cache
+# Create model directory structure
+RUN mkdir -p saved_models/default
+
+# Download models during build 
+RUN wget -O saved_models/default/encoder.pt https://media.githubusercontent.com/media/ceo4u/sonex-voice-api/main/saved_models/default/encoder.pt
+RUN wget -O saved_models/default/synthesizer.pt https://media.githubusercontent.com/media/ceo4u/sonex-voice-api/main/saved_models/default/synthesizer.pt
+RUN wget -O saved_models/default/vocoder.pt https://media.githubusercontent.com/media/ceo4u/sonex-voice-api/main/saved_models/default/vocoder.pt
+
+# Copy requirements first for caching
 COPY requirements.txt .
 
-# Install Python dependencies with explicit Gunicorn installation
-RUN pip install --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir gunicorn==21.2.0
+# Install Python dependencies
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt gunicorn==21.2.0
 
 # Copy application code
 COPY . .
 
-# Expose port (Render will use $PORT environment variable)
+# Runtime configuration
 EXPOSE 5000
-
-# Production server command with timeout and worker configuration
-CMD ["gunicorn", "api:app", "--bind", "0.0.0.0:5000", "--timeout", "120", "--workers", "4", "--worker-class", "sync"]
+CMD ["gunicorn", "api:app", \
+     "--bind", "0.0.0.0:5000", \
+     "--timeout", "120", \
+     "--workers", "2", \
+     "--worker-class", "sync"]
