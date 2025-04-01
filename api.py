@@ -52,8 +52,7 @@ print("Loading models...")
 device = "cpu"
 encoder_model = Encoder(Path(os.path.join("saved_models", "default", "encoder.pt")))
 synthesizer_model = Synthesizer(
-    os.path.join("saved_models", "default", "synthesizer.pt"),
-    sample_rate=16000, hparams={"n_mels": 40}  # Ensure correct feature dimensions
+    os.path.join("saved_models", "default", "synthesizer.pt")
 )
 vocoder.load_model(Path(os.path.join("saved_models", "default", "vocoder.pt")))
 print("Models loaded successfully!")
