@@ -7,11 +7,18 @@ import os
 import sys
 import gdown
 import tempfile
+import gc
 import soundfile as sf
 from synthesizer.audio import Audio
 import traceback
 from pathlib import Path
 from functools import lru_cache
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, 
+                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Add Real-Time-Voice-Cloning to the path
 RTVC_DIR = os.path.join(os.path.dirname(__file__), "Real-Time-Voice-Cloning")
@@ -45,31 +52,64 @@ def download_models():
     for model_name, model_url in MODEL_URLS.items():
         model_path = os.path.join(model_dir, f"{model_name}.pt")
         if not os.path.exists(model_path):
-            print(f"Downloading {model_name} model...")
+            logger.info(f"Downloading {model_name} model...")
             gdown.download(model_url, model_path, quiet=False, fuzzy=True)
 
-download_models()
+# Create a custom audio processor class that uses the updated librosa methods
+class CustomAudio(Audio):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+    
+    def build_mel_basis(self):
+        # Use keyword arguments for librosa.filters.mel
+        return librosa.filters.mel(
+            sr=self.sample_rate,
+            n_fft=self.n_fft,
+            n_mels=self.n_mels,
+            fmin=self.fmin,
+            fmax=self.fmax
+        )
+
+# Memory management function
+def cleanup():
+    """Force garbage collection to free memory"""
+    gc.collect()
+
+# Download models if needed
+try:
+    download_models()
+except Exception as e:
+    logger.error(f"Error downloading models: {str(e)}")
+    raise
 
 # Load models (CPU mode for compatibility)
-print("Loading models...")
-encoder_model = Encoder(Path(os.path.join("saved_models", "default", "encoder.pt")))
-synthesizer_model = Synthesizer(
-    os.path.join("saved_models", "default", "synthesizer.pt")
-)
-vocoder.load_model(Path(os.path.join("saved_models", "default", "vocoder.pt")))
-print("Models loaded successfully!")
+logger.info("Loading models...")
+try:
+    encoder_model = Encoder(Path(os.path.join("saved_models", "default", "encoder.pt")))
+    synthesizer_model = Synthesizer(
+        os.path.join("saved_models", "default", "synthesizer.pt")
+    )
+    vocoder.load_model(Path(os.path.join("saved_models", "default", "vocoder.pt")))
+    logger.info("Models loaded successfully!")
+except Exception as e:
+    logger.error(f"Error loading models: {str(e)}")
+    raise
 
 # Initialize Audio Processor (single instance)
-audio_processor = Audio(
-    sample_rate=SAMPLE_RATE,
-    n_mels=N_MELS,
-    n_fft=2048,
-    hop_length=HOP_LENGTH,
-    win_length=1024,
-    fmin=0,
-    fmax=8000
-)
-print("Audio processor initialized!")
+try:
+    audio_processor = CustomAudio(
+        sample_rate=SAMPLE_RATE,
+        n_mels=N_MELS,
+        n_fft=2048,
+        hop_length=HOP_LENGTH,
+        win_length=1024,
+        fmin=0,
+        fmax=8000
+    )
+    logger.info("Audio processor initialized!")
+except Exception as e:
+    logger.error(f"Error initializing audio processor: {str(e)}")
+    raise
 
 @app.route("/synthesize", methods=["POST"])
 def synthesize():
@@ -80,7 +120,7 @@ def synthesize():
             return jsonify({"error": "Missing text in request"}), 400
 
         text = data['text']
-        print(f"Synthesizing text: '{text}'")
+        logger.info(f"Synthesizing text: '{text}'")
 
         # Get speaker embedding (replace with actual embedding loading)
         embeddings = encoder_model.embed_utterance(np.zeros(SAMPLE_RATE))  # Placeholder
@@ -104,11 +144,13 @@ def synthesize():
         )
             
     except Exception as e:
+        logger.error(f"Synthesis error: {str(e)}")
         traceback.print_exc()
         return jsonify({"error": f"Synthesis failed: {str(e)}"}), 500
     finally:
-        if temp_file:
+        if temp_file and os.path.exists(temp_file.name):
             os.unlink(temp_file.name)
+        cleanup()
 
 @app.route("/", methods=["GET"])
 def home():
@@ -118,45 +160,96 @@ def home():
 def health_check():
     return jsonify({"status": "ok"})
 
+@app.route("/test", methods=["GET"])
+def test():
+    """Simple test endpoint to verify API is working"""
+    return jsonify({
+        "status": "ok", 
+        "message": "API is running!",
+        "endpoints": [
+            {"path": "/", "method": "GET", "description": "Home page"},
+            {"path": "/health", "method": "GET", "description": "Health check"},
+            {"path": "/api/clone-voice", "method": "POST", "description": "Clone voice with audio file and text"}
+        ]
+    })
+
 @lru_cache(maxsize=100)
 def clone_voice_cached(text, audio_hash):
     return clone_voice_processing(text, audio_hash)
 
 @app.route('/api/clone-voice', methods=['POST'])
 def clone_voice():
+    temp_file = None
     try:
         if 'audio' not in request.files or 'text' not in request.form:
             return jsonify({"error": "Missing audio file or text"}), 400
 
         audio_file = request.files['audio']
         text = request.form['text']
-        print(f"Processing request - Text: '{text}', Audio: {audio_file.filename}")
+        logger.info(f"Processing request - Text: '{text}', Audio: {audio_file.filename}")
 
-        with tempfile.NamedTemporaryFile(suffix='.wav') as temp_audio:
-            audio_file.save(temp_audio.name)
-            wav = preprocess_wav(temp_audio.name)
-            mel_spectrogram = audio_processor.melspectrogram(wav)
-            print(f"Mel Spectrogram Shape: {mel_spectrogram.shape}")
+        # Validate file size
+        audio_data = audio_file.read()
+        if len(audio_data) > 10 * 1024 * 1024:  # 10MB limit
+            return jsonify({"error": "Audio file too large (max 10MB)"}), 400
+        
+        # Reset file pointer
+        audio_file.seek(0)
 
-        return clone_voice_processing(text, wav)
+        # Create a temporary file
+        temp_file = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
+        temp_file.write(audio_data)
+        temp_file.close()
+        
+        try:
+            wav = preprocess_wav(temp_file.name)
+            logger.info(f"Preprocessed waveform: {len(wav)} samples")
+            
+            # Process the cloned voice
+            result = clone_voice_processing(text, wav)
+            return result
+            
+        except Exception as e:
+            logger.error(f"Processing error: {str(e)}")
+            return jsonify({"error": f"Failed to process audio: {str(e)}"}), 500
 
     except Exception as e:
+        logger.error(f"Server error: {str(e)}")
         traceback.print_exc()
         return jsonify({"error": f"Server error: {str(e)}"}), 500
+    finally:
+        # Clean up temp file
+        if temp_file and os.path.exists(temp_file.name):
+            try:
+                os.unlink(temp_file.name)
+            except:
+                pass
+        cleanup()
 
 def clone_voice_processing(text, wav):
     try:
+        # Generate embedding
         embeddings = encoder_model.embed_utterance(wav)
-        print(f"Embeddings shape: {embeddings.shape}")
+        logger.info(f"Embeddings shape: {embeddings.shape}")
 
+        # Generate spectrogram
         specs = synthesizer_model.synthesize_spectrograms([text], [embeddings])
+        logger.info(f"Generated spectrogram shape: {specs[0].shape}")
+        
+        # Generate waveform
         generated_wav = vocoder.infer_waveform(specs[0])
+        logger.info(f"Generated waveform: {len(generated_wav)} samples")
         
+        # Save output
         output_filename = f"generated_{os.urandom(4).hex()}.wav"
-        output_path = os.path.join("generated_audio", output_filename)
-        os.makedirs("generated_audio", exist_ok=True)
-        sf.write(output_path, generated_wav, SAMPLE_RATE)
+        output_dir = os.path.join(os.getcwd(), "generated_audio")
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = os.path.join(output_dir, output_filename)
         
+        sf.write(output_path, generated_wav, SAMPLE_RATE)
+        logger.info(f"Output saved to: {output_path}")
+        
+        # Return response
         return jsonify({
             "message": "Voice cloning successful",
             "filename": output_filename,
@@ -164,8 +257,24 @@ def clone_voice_processing(text, wav):
         })
     
     except Exception as e:
+        logger.error(f"Processing error: {str(e)}")
         traceback.print_exc()
         return jsonify({"error": f"Processing error: {str(e)}"}), 500
+    finally:
+        cleanup()
+
+@app.route('/generated_audio/<filename>', methods=['GET'])
+def serve_generated_audio(filename):
+    """Serve generated audio files"""
+    try:
+        directory = os.path.join(os.getcwd(), "generated_audio")
+        return send_file(
+            os.path.join(directory, filename),
+            mimetype='audio/wav'
+        )
+    except Exception as e:
+        logger.error(f"Error serving audio file: {str(e)}")
+        return jsonify({"error": "File not found"}), 404
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
