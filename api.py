@@ -14,6 +14,7 @@ import traceback
 from pathlib import Path
 from functools import lru_cache
 import logging
+import librosa  # Added for mel basis generation
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -97,15 +98,15 @@ except Exception as e:
 
 # Initialize Audio Processor (single instance)
 try:
-audio_processor = Audio(
-    sample_rate=SAMPLE_RATE,
-    n_mels=N_MELS,  # Now using 40 instead of 80
-    n_fft=2048,
-    hop_length=HOP_LENGTH,
-    win_length=1024,
-    fmin=0,
-    fmax=8000
-)
+    audio_processor = CustomAudio(
+        sample_rate=SAMPLE_RATE,
+        n_mels=N_MELS,
+        n_fft=2048,
+        hop_length=HOP_LENGTH,
+        win_length=1024,
+        fmin=0,
+        fmax=8000
+    )
     logger.info("Audio processor initialized!")
 except Exception as e:
     logger.error(f"Error initializing audio processor: {str(e)}")
