@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Union, List
 import numpy as np
 import librosa
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)  # Ignore librosa warnings
 
 
 class Synthesizer:
@@ -135,19 +137,28 @@ class Synthesizer:
             wav = wav / np.abs(wav).max() * hparams.rescaling_max
         return wav
 
-    @staticmethod
-    def make_spectrogram(fpath_or_wav: Union[str, Path, np.ndarray]):
-        """
-        Creates a mel spectrogram from an audio file in the same manner as the mel spectrograms that
-        were fed to the synthesizer when training.
-        """
-        if isinstance(fpath_or_wav, str) or isinstance(fpath_or_wav, Path):
-            wav = Synthesizer.load_preprocess_wav(fpath_or_wav)
-        else:
-            wav = fpath_or_wav
-
-        mel_spectrogram = audio.melspectrogram(wav, hparams).astype(np.float32)
-        return mel_spectrogram
+@staticmethod
+def make_spectrogram(fpath_or_wav: Union[str, Path, np.ndarray]):
+    """
+    Creates a mel spectrogram with proper librosa arguments
+    """
+    if isinstance(fpath_or_wav, (str, Path)):
+        wav = Synthesizer.load_preprocess_wav(fpath_or_wav)
+    else:
+        wav = fpath_or_wav
+    
+    # Use keyword arguments for librosa
+    mel = librosa.feature.melspectrogram(
+        y=wav,
+        sr=hparams.sample_rate,
+        n_fft=hparams.n_fft,
+        hop_length=hparams.hop_size,
+        win_length=hparams.win_size,
+        n_mels=hparams.num_mels,
+        fmin=hparams.mel_fmin,
+        fmax=hparams.mel_fmax
+    )
+    return mel.astype(np.float32)
 
     @staticmethod
     def griffin_lim(mel):

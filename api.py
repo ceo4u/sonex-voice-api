@@ -240,42 +240,62 @@ def clone_voice():
         if temp_file and os.path.exists(temp_file.name):
             os.unlink(temp_file.name)
 
-def clone_voice_processing(text, wav):
+@app.route('/api/clone-voice', methods=['POST'])
+def clone_voice():
+    temp_file = None
     try:
-        # Generate embedding
-        embeddings = encoder_model.embed_utterance(wav)
-        logger.info(f"Embeddings shape: {embeddings.shape}")
+        # Validate input
+        if 'audio' not in request.files or 'text' not in request.form:
+            return jsonify({"error": "Missing audio or text"}), 400
 
-        # Generate spectrogram
-        specs = synthesizer_model.synthesize_spectrograms([text], [embeddings])
-        logger.info(f"Generated spectrogram shape: {specs[0].shape}")
-        
-        # Generate waveform
-        generated_wav = vocoder.infer_waveform(specs[0])
-        logger.info(f"Generated waveform: {len(generated_wav)} samples")
-        
-        # Save output
-        output_filename = f"generated_{os.urandom(4).hex()}.wav"
-        output_dir = os.path.join(os.getcwd(), "generated_audio")
-        os.makedirs(output_dir, exist_ok=True)
-        output_path = os.path.join(output_dir, output_filename)
-        
-        sf.write(output_path, generated_wav, SAMPLE_RATE)
-        logger.info(f"Output saved to: {output_path}")
-        
-        # Return response
-        return jsonify({
-            "message": "Voice cloning successful",
-            "filename": output_filename,
-            "url": f"/generated_audio/{output_filename}"
-        })
-    
+        audio_file = request.files['audio']
+        text = request.form['text']
+        logger.info(f"Processing: '{text}', {audio_file.filename}")
+
+        # Validate file
+        if not audio_file.filename.lower().endswith('.wav'):
+            return jsonify({"error": "Only WAV files supported"}), 400
+
+        # Save to temp file
+        temp_file = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
+        audio_file.save(temp_file.name)
+
+        try:
+            # Preprocess audio
+            wav = preprocess_wav(temp_file.name)
+            if len(wav) < SAMPLE_RATE:
+                return jsonify({"error": "Audio too short (min 1 second)"}), 400
+
+            # Generate embedding
+            embed = encoder_model.embed_utterance(wav)
+            logger.info("Embedding generated")
+
+            # Synthesize spectrogram
+            specs = synthesizer_model.synthesize_spectrograms([text], [embed])
+            spec = specs[0]
+            logger.info(f"Spectrogram shape: {spec.shape}")
+
+            # Generate waveform
+            generated_wav = vocoder.infer_waveform(spec)
+            logger.info(f"Waveform length: {len(generated_wav)}")
+
+            # Save output
+            output_path = f"output_{int(time.time())}.wav"
+            sf.write(output_path, generated_wav, SAMPLE_RATE)
+            
+            return send_file(output_path, mimetype='audio/wav')
+
+        except Exception as e:
+            logger.error(f"Processing error: {str(e)}")
+            return jsonify({"error": f"Processing failed: {str(e)}"}), 500
+
     except Exception as e:
-        logger.error(f"Processing error: {str(e)}")
-        traceback.print_exc()
-        return jsonify({"error": f"Processing error: {str(e)}"}), 500
+        logger.error(f"Server error: {str(e)}")
+        return jsonify({"error": "Internal error"}), 500
+
     finally:
-        cleanup()
+        if temp_file and os.path.exists(temp_file.name):
+            os.unlink(temp_file.name)
 
 @app.route('/generated_audio/<filename>', methods=['GET'])
 def serve_generated_audio(filename):
@@ -293,7 +313,7 @@ def serve_generated_audio(filename):
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(
-        host="0.0.0.0",
+        host="0.0.0.0",	
         port=port,
         debug=False,
         use_reloader=False
