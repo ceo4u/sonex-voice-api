@@ -1,4 +1,6 @@
 import numpy as np
+np.bool = bool  # Fix numpy deprecation warning
+
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import os
@@ -34,7 +36,7 @@ synthesizer = Synthesizer(Path("saved_models/default/synthesizer.pt"))
 vocoder.load_model(Path("saved_models/default/vocoder.pt"))
 logger.info("Models loaded!")
 
-@app.route('/api/clone-voice', methods=['POST'])  # Keeping your original endpoint
+@app.route('/api/clone-voice', methods=['POST'])
 def clone_voice():
     try:
         if 'audio' not in request.files or 'text' not in request.form:
