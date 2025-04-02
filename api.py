@@ -26,7 +26,7 @@ sys.path.append(RTVC_DIR)
 
 # Constants
 SAMPLE_RATE = 16000
-N_MELS = 80
+N_MELS = 40
 HOP_LENGTH = 256
 
 # Import cloning models
@@ -97,15 +97,15 @@ except Exception as e:
 
 # Initialize Audio Processor (single instance)
 try:
-    audio_processor = CustomAudio(
-        sample_rate=SAMPLE_RATE,
-        n_mels=N_MELS,
-        n_fft=2048,
-        hop_length=HOP_LENGTH,
-        win_length=1024,
-        fmin=0,
-        fmax=8000
-    )
+audio_processor = Audio(
+    sample_rate=SAMPLE_RATE,
+    n_mels=N_MELS,  # Now using 40 instead of 80
+    n_fft=2048,
+    hop_length=HOP_LENGTH,
+    win_length=1024,
+    fmin=0,
+    fmax=8000
+)
     logger.info("Audio processor initialized!")
 except Exception as e:
     logger.error(f"Error initializing audio processor: {str(e)}")
@@ -181,6 +181,7 @@ def clone_voice_cached(text, audio_hash):
 def clone_voice():
     temp_file = None
     try:
+        # Validate input
         if 'audio' not in request.files or 'text' not in request.form:
             return jsonify({"error": "Missing audio file or text"}), 400
 
@@ -188,43 +189,55 @@ def clone_voice():
         text = request.form['text']
         logger.info(f"Processing request - Text: '{text}', Audio: {audio_file.filename}")
 
-        # Validate file size
-        audio_data = audio_file.read()
-        if len(audio_data) > 10 * 1024 * 1024:  # 10MB limit
+        # Validate file size and type
+        if not audio_file.filename.lower().endswith('.wav'):
+            return jsonify({"error": "Only WAV files are supported"}), 400
+            
+        if len(audio_file.read()) > 10 * 1024 * 1024:  # 10MB limit
             return jsonify({"error": "Audio file too large (max 10MB)"}), 400
-        
-        # Reset file pointer
-        audio_file.seek(0)
+        audio_file.seek(0)  # Reset pointer after reading
 
-        # Create a temporary file
+        # Create temp file
         temp_file = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
-        temp_file.write(audio_data)
-        temp_file.close()
+        audio_file.save(temp_file.name)
         
         try:
+            # Preprocess with correct sample rate and mel bands
             wav = preprocess_wav(temp_file.name)
-            logger.info(f"Preprocessed waveform: {len(wav)} samples")
+            if len(wav) < 16000:  # Minimum 1 second of audio
+                return jsonify({"error": "Audio too short (minimum 1 second required)"}), 400
+
+            logger.info(f"Preprocessed audio length: {len(wav)/16000:.2f} seconds")
             
-            # Process the cloned voice
-            result = clone_voice_processing(text, wav)
-            return result
+            # Generate mel spectrogram with correct dimensions (40 bands)
+            mel = audio_processor.melspectrogram(wav)
+            logger.info(f"Mel spectrogram shape: {mel.shape}")  # Should be (40, time_steps)
+
+            # Voice cloning process
+            embeddings = encoder_model.embed_utterance(wav)
+            specs = synthesizer_model.synthesize_spectrograms([text], [embeddings])
+            generated_wav = vocoder.infer_waveform(specs[0])
             
+            # Save output
+            output_filename = f"output_{int(time.time())}.wav"
+            output_path = os.path.join("generated_audio", output_filename)
+            os.makedirs("generated_audio", exist_ok=True)
+            sf.write(output_path, generated_wav, 16000)
+            
+            return send_file(output_path, mimetype='audio/wav')
+
         except Exception as e:
-            logger.error(f"Processing error: {str(e)}")
-            return jsonify({"error": f"Failed to process audio: {str(e)}"}), 500
+            logger.error(f"Processing failed: {str(e)}", exc_info=True)
+            return jsonify({"error": f"Voice cloning failed: {str(e)}"}), 500
 
     except Exception as e:
-        logger.error(f"Server error: {str(e)}")
-        traceback.print_exc()
-        return jsonify({"error": f"Server error: {str(e)}"}), 500
+        logger.error(f"Server error: {str(e)}", exc_info=True)
+        return jsonify({"error": f"Internal server error"}), 500
+        
     finally:
-        # Clean up temp file
+        # Clean up temp files
         if temp_file and os.path.exists(temp_file.name):
-            try:
-                os.unlink(temp_file.name)
-            except:
-                pass
-        cleanup()
+            os.unlink(temp_file.name)
 
 def clone_voice_processing(text, wav):
     try:
