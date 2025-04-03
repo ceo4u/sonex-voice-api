@@ -178,16 +178,18 @@ def clone_voice():
         # Generate clone
         logger.info("Generating voice embedding...")
         try:
-            # Convert the preprocessed waveform to mel spectrogram
+            # Import necessary functions
             from encoder.audio import wav_to_mel_spectrogram
+            from encoder.inference import embed_utterance
 
             # Convert the audio to mel spectrogram
             logger.info("Converting audio to mel spectrogram...")
             mel = wav_to_mel_spectrogram(wav)
             logger.info(f"Mel spectrogram created, shape: {mel.shape}")
 
-            # Generate the embedding from the mel spectrogram
-            embed = encoder.embed_utterance(mel)
+            # Generate the embedding using the global function
+            logger.info("Generating embedding from mel spectrogram...")
+            embed = embed_utterance(mel, using_partials=False)
             logger.info(f"Embedding generated, shape: {embed.shape if hasattr(embed, 'shape') else len(embed)}")
 
             logger.info("Synthesizing spectrograms...")
@@ -239,10 +241,16 @@ def health():
     return jsonify(status)
 
 # Load models on startup
-if load_models():
-    logger.info("Models loaded successfully on startup")
-else:
-    logger.error("Failed to load models on startup")
+def initialize_models():
+    if load_models():
+        logger.info("Models loaded successfully on startup")
+        return True
+    else:
+        logger.error("Failed to load models on startup")
+        return False
+
+# Initialize models when the module is loaded
+initialize_models()
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
