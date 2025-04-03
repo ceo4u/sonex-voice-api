@@ -29,5 +29,13 @@ COPY . .
 # Expose port
 EXPOSE 5000
 
-# Start with gunicorn
-CMD ["gunicorn", "api:app", "--bind", "0.0.0.0:5000", "--timeout", "600", "--workers", "1", "--preload"]
+# Create a script to run the application
+RUN echo '#!/bin/bash\n\
+if [ -z "$PORT" ]; then\n\
+  PORT=5000\n\
+fi\n\
+exec gunicorn api:app --config gunicorn.conf.py' > /app/start.sh \
+    && chmod +x /app/start.sh
+
+# Start with the script
+CMD ["/app/start.sh"]

@@ -149,9 +149,12 @@ def health():
     }
     return jsonify(status)
 
-if __name__ == '__main__':
-    if not load_models():
-        sys.exit(1)
+# Load models on startup
+if load_models():
+    logger.info("Models loaded successfully on startup")
+else:
+    logger.error("Failed to load models on startup")
 
+if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)

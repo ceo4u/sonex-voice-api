@@ -2,22 +2,12 @@ services:
   - type: web
     name: voice-cloning-api
     env: docker
-    buildCommand: "docker build -t sonex-voice-api ."
-    startCommand: "gunicorn api:app --bind 0.0.0.0:5000"
-    runtime: python-3.11.9
-
+    buildCommand: "docker build -t voice-clone ."
+    startCommand: "docker run -p $PORT:5000 voice-clone"
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.9
       - key: PORT
-        value: 10000
+        value: 5000
       - key: PYTHONUNBUFFERED
         value: 1
-      - key: PYTHONPATH
-        value: /opt/render/project/src
     healthCheckPath: /api/health
     autoDeploy: true
-    disk:
-      name: models
-      mountPath: /opt/render/project/src/saved_models
-      sizeGB: 50 
