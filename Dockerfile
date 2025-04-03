@@ -1,24 +1,33 @@
-FROM python:3.8-slim
+FROM python:3.9-slim
 
-WORKDIR /app
-
-# Install system dependencies
+# System dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     libsndfile1 \
     ffmpeg \
+    git \
+    curl \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for caching
-COPY requirements.txt .
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+# Create app directory
+WORKDIR /app
 
-# Copy application code
+# Copy requirements first for better caching
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Create directories
+RUN mkdir -p saved_models/default output
+
+# Copy models first
+COPY saved_models/default/*.pt saved_models/default/
+
+# Copy the rest of the application
 COPY . .
 
-# Pre-compile vocoder
-RUN python precompile.py
-
+# Expose port
 EXPOSE 5000
-CMD ["gunicorn", "api:app", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120"]
+
+# Start with gunicorn
+CMD ["gunicorn", "api:app", "--bind", "0.0.0.0:5000", "--timeout", "600", "--workers", "1", "--preload"]
