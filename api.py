@@ -132,10 +132,15 @@ def load_models():
                     # Don't try to load the model again if it's still None
             logger.info(f"Vocoder loaded successfully: {vocoder_model is not None}")
 
-            # Verify all models are loaded
-            if not all([encoder, synthesizer, vocoder_model]):
-                logger.error(f"Some models failed to load. Encoder: {encoder is not None}, Synthesizer: {synthesizer is not None}, Vocoder: {vocoder_model is not None}")
+            # Verify required models are loaded (encoder and synthesizer)
+            # Vocoder is optional as we can use Griffin-Lim algorithm instead
+            if not encoder or not synthesizer:
+                logger.error(f"Required models failed to load. Encoder: {encoder is not None}, Synthesizer: {synthesizer is not None}")
                 return False
+
+            # Log vocoder status but don't fail if it's not loaded
+            if not vocoder_model:
+                logger.warning(f"Vocoder model not loaded. Will use Griffin-Lim algorithm instead.")
         except Exception as e:
             logger.error(f"Error loading specific model: {str(e)}\n{traceback.format_exc()}")
             raise
@@ -225,10 +230,9 @@ def clone_voice():
                     logger.error(f"Failed to load vocoder model on demand: {str(e)}")
                     vocoder_load_attempted = True
 
-            # If we still don't have a vocoder model, try to use the synthesizer directly
-            if not vocoder_model:
-                logger.warning("Using synthesizer directly without vocoder")
-                # We'll handle this in the synthesis step
+            # If we still don't have a vocoder model, we'll use the synthesizer directly
+            # No need to check here, we'll handle it in the synthesis step
+            logger.warning("Will use synthesizer directly without vocoder if needed")
 
         # Process audio
         try:
@@ -256,12 +260,19 @@ def clone_voice():
 
             # Generate waveform
             logger.info("Inferring waveform...")
-            if vocoder_model:
-                # Use vocoder if available
-                generated_wav = vocoder_model.infer_waveform(specs[0])
-                logger.info(f"Waveform generated with vocoder, length: {len(generated_wav)} samples")
-            else:
-                # Use synthesizer's built-in Griffin-Lim algorithm if vocoder is not available
+            try:
+                if vocoder_model is not None:
+                    # Try to use vocoder if available
+                    logger.info("Attempting to use vocoder for waveform generation")
+                    generated_wav = vocoder_model.infer_waveform(specs[0])
+                    logger.info(f"Waveform generated with vocoder, length: {len(generated_wav)} samples")
+                else:
+                    # Vocoder not available, use Griffin-Lim
+                    raise ValueError("Vocoder not available")
+            except Exception as e:
+                # If vocoder fails for any reason, fall back to Griffin-Lim
+                logger.warning(f"Vocoder failed or not available: {str(e)}. Using Griffin-Lim algorithm instead.")
+                # Use synthesizer's built-in Griffin-Lim algorithm
                 logger.info("Using Griffin-Lim algorithm for waveform generation")
                 generated_wav = synthesizer.griffin_lim(specs[0])
                 logger.info(f"Waveform generated with Griffin-Lim, length: {len(generated_wav)} samples")
@@ -313,14 +324,18 @@ def health():
     encoder_loaded = encoder is not None
     synthesizer_loaded = synthesizer is not None
     vocoder_loaded = vocoder_model is not None
-    all_loaded = encoder_loaded and synthesizer_loaded and vocoder_loaded
+
+    # We only need encoder and synthesizer to be loaded
+    # Vocoder is optional as we can use Griffin-Lim algorithm instead
+    all_required_loaded = encoder_loaded and synthesizer_loaded
 
     status = {
-        "status": "ok" if all_loaded else "partial" if (encoder_loaded and synthesizer_loaded) else "error",
+        "status": "ok" if all_required_loaded else "error",
         "models": {
             "encoder": encoder_loaded,
             "synthesizer": synthesizer_loaded,
-            "vocoder": vocoder_loaded
+            "vocoder": vocoder_loaded,
+            "griffin_lim_fallback": True
         },
         "timestamp": time.time()
     }
