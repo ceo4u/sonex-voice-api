@@ -9,8 +9,8 @@ ls -la saved_models/default/
 
 # Preload the application to ensure models are loaded
 echo "Preloading application..."
-python -c "import api; print('Models loaded:', api.encoder is not None and api.synthesizer is not None and api.vocoder_model is not None)"
+python load_models.py
 
-# Start the server
+# Start the server with configuration file
 echo "Starting server..."
-exec gunicorn api:app --bind 0.0.0.0:$PORT --timeout 600 --workers 1 --preload
+exec gunicorn api:app --config gunicorn.conf.py

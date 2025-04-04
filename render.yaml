@@ -9,5 +9,10 @@ services:
         value: 5000
       - key: PYTHONUNBUFFERED
         value: 1
+      - key: GUNICORN_TIMEOUT
+        value: 900
+      - key: GUNICORN_WORKERS
+        value: 1
     healthCheckPath: /api/health
     autoDeploy: true
+    plan: standard

@@ -1,6 +1,7 @@
 ﻿import os
 
-timeout = 600
+# Increase timeout for long-running requests
+timeout = 900
 workers = 1
 preload_app = True
 bind = f"0.0.0.0:{os.environ.get('PORT', '5000')}"
@@ -12,3 +13,9 @@ max_requests_jitter = 50
 accesslog = '-'
 errorlog = '-'
 loglevel = 'info'
+
+# Graceful timeout
+graceful_timeout = 300
+
+# Worker timeout
+worker_timeout = 900

@@ -1,1 +1,1 @@
-web: gunicorn api:app --bind 0.0.0.0:$PORT --timeout 600 --workers 1 --preload
+web: gunicorn api:app --config gunicorn.conf.py
