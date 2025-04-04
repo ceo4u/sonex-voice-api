@@ -80,6 +80,9 @@ encoder = None
 synthesizer = None
 vocoder_model = None
 
+# Global flag to track if we've tried to load the vocoder
+vocoder_load_attempted = False
+
 def load_models():
     global encoder, synthesizer, vocoder_model
 
@@ -208,14 +211,24 @@ def clone_voice():
             return jsonify({"error": "Voice cloning service not initialized properly"}), 500
 
         # Check vocoder separately as it might be loaded later
+        global vocoder_model, vocoder_load_attempted
         if not vocoder_model:
-            logger.warning("Vocoder model not loaded yet, will try to load it on demand")
-            # Try to load it now
-            import vocoder.inference as vocoder
-            vocoder_model = vocoder.load_model(MODELS_DIR / "vocoder.pt")
+            if not vocoder_load_attempted:
+                logger.warning("Vocoder model not loaded yet, will try to load it on demand")
+                # Try to load it now
+                try:
+                    # Try loading with the module's function
+                    vocoder_model = vocoder.load_model(MODELS_DIR / "vocoder.pt")
+                    logger.info(f"Loaded vocoder model on demand: {vocoder_model is not None}")
+                    vocoder_load_attempted = True
+                except Exception as e:
+                    logger.error(f"Failed to load vocoder model on demand: {str(e)}")
+                    vocoder_load_attempted = True
+
+            # If we still don't have a vocoder model, try to use the synthesizer directly
             if not vocoder_model:
-                logger.error("Failed to load vocoder model on demand")
-                return jsonify({"error": "Voice cloning service not fully initialized"}), 500
+                logger.warning("Using synthesizer directly without vocoder")
+                # We'll handle this in the synthesis step
 
         # Process audio
         try:
@@ -241,9 +254,17 @@ def clone_voice():
             specs = synthesizer.synthesize_spectrograms([text], [embed])
             logger.info(f"Spectrograms synthesized, shape: {specs[0].shape if hasattr(specs[0], 'shape') else len(specs[0])}")
 
+            # Generate waveform
             logger.info("Inferring waveform...")
-            generated_wav = vocoder_model.infer_waveform(specs[0])
-            logger.info(f"Waveform generated, length: {len(generated_wav)} samples")
+            if vocoder_model:
+                # Use vocoder if available
+                generated_wav = vocoder_model.infer_waveform(specs[0])
+                logger.info(f"Waveform generated with vocoder, length: {len(generated_wav)} samples")
+            else:
+                # Use synthesizer's built-in Griffin-Lim algorithm if vocoder is not available
+                logger.info("Using Griffin-Lim algorithm for waveform generation")
+                generated_wav = synthesizer.griffin_lim(specs[0])
+                logger.info(f"Waveform generated with Griffin-Lim, length: {len(generated_wav)} samples")
         except Exception as e:
             logger.error(f"Voice synthesis error: {str(e)}\n{traceback.format_exc()}")
             return jsonify({"error": f"Voice synthesis failed: {str(e)}"}), 500
