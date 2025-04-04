@@ -65,14 +65,23 @@ def index():
         "status": "running"
     })
 
-# Global model instances and functions
+# Import necessary modules
+from encoder.inference import Encoder
+from synthesizer.inference import Synthesizer
+import vocoder.inference as vocoder
+from encoder.audio import preprocess_wav, wav_to_mel_spectrogram
+
+# Force CPU mode
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+torch.set_grad_enabled(False)
+
+# Global model instances
 encoder = None
 synthesizer = None
 vocoder_model = None
-preprocess_wav = None
 
 def load_models():
-    global encoder, synthesizer, vocoder_model, preprocess_wav
+    global encoder, synthesizer, vocoder_model
 
     try:
         # Verify models first
@@ -82,16 +91,6 @@ def load_models():
                 f"Model verification failed. Missing: {missing}"
             )
 
-        # Import after verification
-        from encoder.inference import Encoder
-        from synthesizer.inference import Synthesizer
-        import vocoder.inference as vocoder
-        from encoder.audio import preprocess_wav
-
-        # Force CPU mode
-        os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-        torch.set_grad_enabled(False)
-
         logger.info("Loading models...")
         try:
             # Load encoder
@@ -99,21 +98,41 @@ def load_models():
             encoder_path = MODELS_DIR / "encoder.pt"
             logger.info(f"Encoder path: {encoder_path} (exists: {encoder_path.exists()})")
             encoder = Encoder(encoder_path)
-            logger.info("Encoder loaded successfully")
+            logger.info(f"Encoder loaded successfully: {encoder is not None}")
 
             # Load synthesizer
             logger.info("Loading synthesizer model...")
             synthesizer_path = MODELS_DIR / "synthesizer.pt"
             logger.info(f"Synthesizer path: {synthesizer_path} (exists: {synthesizer_path.exists()})")
             synthesizer = Synthesizer(synthesizer_path)
-            logger.info("Synthesizer loaded successfully")
+            logger.info(f"Synthesizer loaded successfully: {synthesizer is not None}")
 
             # Load vocoder
             logger.info("Loading vocoder model...")
             vocoder_path = MODELS_DIR / "vocoder.pt"
             logger.info(f"Vocoder path: {vocoder_path} (exists: {vocoder_path.exists()})")
+            # Use the global vocoder module
+            global vocoder_model
             vocoder_model = vocoder.load_model(vocoder_path)
-            logger.info("Vocoder loaded successfully")
+            # Force the vocoder model to be loaded
+            if vocoder_model is None:
+                logger.error("Vocoder model is None after loading")
+                # Try loading it directly using the vocoder module's function
+                try:
+                    # Try again with the module's function
+                    vocoder_model = vocoder.load_model(vocoder_path)
+                    logger.info("Successfully loaded vocoder model on second attempt")
+                except Exception as e:
+                    logger.error(f"Second attempt to load vocoder failed: {str(e)}")
+                    # As a last resort, try to use the global one from the preload
+                    logger.info(f"Using global vocoder from preload if available")
+                    # Don't try to load the model again if it's still None
+            logger.info(f"Vocoder loaded successfully: {vocoder_model is not None}")
+
+            # Verify all models are loaded
+            if not all([encoder, synthesizer, vocoder_model]):
+                logger.error(f"Some models failed to load. Encoder: {encoder is not None}, Synthesizer: {synthesizer is not None}, Vocoder: {vocoder_model is not None}")
+                return False
         except Exception as e:
             logger.error(f"Error loading specific model: {str(e)}\n{traceback.format_exc()}")
             raise
@@ -142,7 +161,6 @@ class AudioProcessor:
                 logger.info(f"Audio file saved to temporary location: {tmp.name}")
 
                 # Check if file exists and has content
-                import os
                 if os.path.getsize(tmp.name) == 0:
                     logger.error("Temporary audio file is empty")
                     raise ValueError("Uploaded audio file is empty")
@@ -155,7 +173,12 @@ class AudioProcessor:
                     logger.error(f"Audio too short: {len(wav)} samples")
                     raise ValueError("Audio too short (minimum 1 second)")
 
-                return wav
+                # Convert to mel spectrogram for the encoder
+                logger.info("Converting to mel spectrogram...")
+                mel = wav_to_mel_spectrogram(wav)
+                logger.info(f"Mel spectrogram created, shape: {mel.shape if hasattr(mel, 'shape') else 'unknown'}")
+
+                return mel
         except Exception as e:
             logger.error(f"Error processing audio: {str(e)}\n{traceback.format_exc()}")
             raise
@@ -179,11 +202,26 @@ def clone_voice():
 
         logger.info(f"Request parameters - Text: '{text}', Audio filename: '{audio_file.filename}'")
 
+        # Check if models are loaded
+        if not encoder or not synthesizer:
+            logger.error("Encoder or synthesizer models not loaded properly")
+            return jsonify({"error": "Voice cloning service not initialized properly"}), 500
+
+        # Check vocoder separately as it might be loaded later
+        if not vocoder_model:
+            logger.warning("Vocoder model not loaded yet, will try to load it on demand")
+            # Try to load it now
+            import vocoder.inference as vocoder
+            vocoder_model = vocoder.load_model(MODELS_DIR / "vocoder.pt")
+            if not vocoder_model:
+                logger.error("Failed to load vocoder model on demand")
+                return jsonify({"error": "Voice cloning service not fully initialized"}), 500
+
         # Process audio
         try:
             AudioProcessor.validate_audio(audio_file)
-            wav = AudioProcessor.process_audio(audio_file)
-            logger.info(f"Audio processing successful, wav shape: {wav.shape if hasattr(wav, 'shape') else len(wav)}")
+            mel = AudioProcessor.process_audio(audio_file)
+            logger.info(f"Audio processing successful, mel shape: {mel.shape if hasattr(mel, 'shape') else 'unknown'}")
         except ValueError as e:
             logger.error(f"Audio validation/processing error: {str(e)}")
             return jsonify({"error": str(e)}), 400
@@ -191,22 +229,9 @@ def clone_voice():
             logger.error(f"Unexpected audio processing error: {str(e)}\n{traceback.format_exc()}")
             return jsonify({"error": f"Audio processing failed: {str(e)}"}), 500
 
-        # Check if models are loaded
-        if not all([encoder, synthesizer, vocoder_model]):
-            logger.error("Models not loaded properly")
-            return jsonify({"error": "Voice cloning service not initialized properly"}), 500
-
         # Generate clone
         logger.info("Generating voice embedding...")
         try:
-            # Import necessary functions
-            from encoder.audio import wav_to_mel_spectrogram
-
-            # Convert the audio to mel spectrogram
-            logger.info("Converting audio to mel spectrogram...")
-            mel = wav_to_mel_spectrogram(wav)
-            logger.info(f"Mel spectrogram created, shape: {mel.shape}")
-
             # Generate the embedding using the encoder
             logger.info("Generating embedding from mel spectrogram...")
             embed = encoder.embed_utterance(mel)
@@ -253,9 +278,29 @@ def clone_voice():
 
 @app.route('/api/health', methods=['GET'])
 def health():
+    # Check if vocoder is loaded, if not try to load it
+    global vocoder_model
+    if not vocoder_model:
+        try:
+            import vocoder.inference as vocoder
+            vocoder_model = vocoder.load_model(MODELS_DIR / "vocoder.pt")
+            logger.info(f"Loaded vocoder model on health check: {vocoder_model is not None}")
+        except Exception as e:
+            logger.error(f"Failed to load vocoder model on health check: {str(e)}")
+
+    # Prepare status response
+    encoder_loaded = encoder is not None
+    synthesizer_loaded = synthesizer is not None
+    vocoder_loaded = vocoder_model is not None
+    all_loaded = encoder_loaded and synthesizer_loaded and vocoder_loaded
+
     status = {
-        "status": "ok" if all([encoder, synthesizer, vocoder_model]) else "error",
-        "models_loaded": all([encoder, synthesizer, vocoder_model]),
+        "status": "ok" if all_loaded else "partial" if (encoder_loaded and synthesizer_loaded) else "error",
+        "models": {
+            "encoder": encoder_loaded,
+            "synthesizer": synthesizer_loaded,
+            "vocoder": vocoder_loaded
+        },
         "timestamp": time.time()
     }
     return jsonify(status)
@@ -267,11 +312,11 @@ def initialize_models():
     if success:
         logger.info("Models loaded successfully on startup")
         # Verify that models are actually loaded
-        if all([encoder, synthesizer, vocoder_model, preprocess_wav]):
+        if all([encoder, synthesizer, vocoder_model]):
             logger.info("All model objects are properly initialized")
             return True
         else:
-            logger.error("Some model objects are still None after loading")
+            logger.error(f"Some model objects are still None after loading. Encoder: {encoder is not None}, Synthesizer: {synthesizer is not None}, Vocoder: {vocoder_model is not None}")
             return False
     else:
         logger.error("Failed to load models on startup")
@@ -281,6 +326,12 @@ def initialize_models():
 logger.info("Starting model initialization...")
 success = initialize_models()
 logger.info(f"Model initialization {'succeeded' if success else 'failed'}")
+
+# If models failed to load, try one more time
+if not success:
+    logger.info("Attempting to load models again...")
+    success = initialize_models()
+    logger.info(f"Second model initialization attempt {'succeeded' if success else 'failed'}")
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
