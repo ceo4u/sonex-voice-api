@@ -93,15 +93,36 @@ def load_models():
         torch.set_grad_enabled(False)
 
         logger.info("Loading models...")
-        encoder = Encoder(MODELS_DIR / "encoder.pt")
-        synthesizer = Synthesizer(MODELS_DIR / "synthesizer.pt")
-        vocoder_model = vocoder.load_model(MODELS_DIR / "vocoder.pt")
+        try:
+            # Load encoder
+            logger.info("Loading encoder model...")
+            encoder_path = MODELS_DIR / "encoder.pt"
+            logger.info(f"Encoder path: {encoder_path} (exists: {encoder_path.exists()})")
+            encoder = Encoder(encoder_path)
+            logger.info("Encoder loaded successfully")
 
-        logger.info("Models loaded successfully")
+            # Load synthesizer
+            logger.info("Loading synthesizer model...")
+            synthesizer_path = MODELS_DIR / "synthesizer.pt"
+            logger.info(f"Synthesizer path: {synthesizer_path} (exists: {synthesizer_path.exists()})")
+            synthesizer = Synthesizer(synthesizer_path)
+            logger.info("Synthesizer loaded successfully")
+
+            # Load vocoder
+            logger.info("Loading vocoder model...")
+            vocoder_path = MODELS_DIR / "vocoder.pt"
+            logger.info(f"Vocoder path: {vocoder_path} (exists: {vocoder_path.exists()})")
+            vocoder_model = vocoder.load_model(vocoder_path)
+            logger.info("Vocoder loaded successfully")
+        except Exception as e:
+            logger.error(f"Error loading specific model: {str(e)}\n{traceback.format_exc()}")
+            raise
+
+        logger.info("All models loaded successfully")
         return True
 
     except Exception as e:
-        logger.error(f"Model loading failed: {str(e)}")
+        logger.error(f"Model loading failed: {str(e)}\n{traceback.format_exc()}")
         return False
 
 class AudioProcessor:
@@ -180,16 +201,15 @@ def clone_voice():
         try:
             # Import necessary functions
             from encoder.audio import wav_to_mel_spectrogram
-            from encoder.inference import embed_utterance
 
             # Convert the audio to mel spectrogram
             logger.info("Converting audio to mel spectrogram...")
             mel = wav_to_mel_spectrogram(wav)
             logger.info(f"Mel spectrogram created, shape: {mel.shape}")
 
-            # Generate the embedding using the global function
+            # Generate the embedding using the encoder
             logger.info("Generating embedding from mel spectrogram...")
-            embed = embed_utterance(mel, using_partials=False)
+            embed = encoder.embed_utterance(mel)
             logger.info(f"Embedding generated, shape: {embed.shape if hasattr(embed, 'shape') else len(embed)}")
 
             logger.info("Synthesizing spectrograms...")
@@ -242,15 +262,25 @@ def health():
 
 # Load models on startup
 def initialize_models():
-    if load_models():
+    logger.info("Initializing models on startup...")
+    success = load_models()
+    if success:
         logger.info("Models loaded successfully on startup")
-        return True
+        # Verify that models are actually loaded
+        if all([encoder, synthesizer, vocoder_model, preprocess_wav]):
+            logger.info("All model objects are properly initialized")
+            return True
+        else:
+            logger.error("Some model objects are still None after loading")
+            return False
     else:
         logger.error("Failed to load models on startup")
         return False
 
 # Initialize models when the module is loaded
-initialize_models()
+logger.info("Starting model initialization...")
+success = initialize_models()
+logger.info(f"Model initialization {'succeeded' if success else 'failed'}")
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
