@@ -16,3 +16,8 @@ services:
     healthCheckPath: /api/health
     autoDeploy: true
     plan: standard
+    scaling:
+      minInstances: 1
+      maxInstances: 1
+      targetMemoryPercent: 80
+      targetCPUPercent: 80

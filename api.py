@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 import torch
 import hashlib
+import numpy as np
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -274,8 +275,22 @@ def clone_voice():
                 logger.warning(f"Vocoder failed or not available: {str(e)}. Using Griffin-Lim algorithm instead.")
                 # Use synthesizer's built-in Griffin-Lim algorithm
                 logger.info("Using Griffin-Lim algorithm for waveform generation")
-                generated_wav = synthesizer.griffin_lim(specs[0])
+                try:
+                    # Try to use the griffin_lim method if it exists
+                    generated_wav = synthesizer.griffin_lim(specs[0])
+                except AttributeError:
+                    # If the method doesn't exist, use the audio module directly
+                    from synthesizer.audio import inv_mel_spectrogram
+                    from synthesizer.hparams import hparams
+                    logger.info("Using audio module's inv_mel_spectrogram function")
+                    generated_wav = inv_mel_spectrogram(specs[0], hparams)
+
                 logger.info(f"Waveform generated with Griffin-Lim, length: {len(generated_wav)} samples")
+
+                # Normalize the audio to prevent clipping
+                max_wav = np.max(np.abs(generated_wav))
+                if max_wav > 1.0:
+                    generated_wav = generated_wav / max_wav * 0.9
         except Exception as e:
             logger.error(f"Voice synthesis error: {str(e)}\n{traceback.format_exc()}")
             return jsonify({"error": f"Voice synthesis failed: {str(e)}"}), 500
