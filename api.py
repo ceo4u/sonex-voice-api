@@ -84,6 +84,57 @@ vocoder_model = None
 # Global flag to track if we've tried to load the vocoder
 vocoder_load_attempted = False
 
+def load_vocoder(model_path):
+    """
+    Load vocoder model with proper state dict handling
+    """
+    logger.info(f"Loading vocoder from {model_path}")
+
+    try:
+        # Try to load the vocoder
+        checkpoint = torch.load(model_path, map_location=torch.device('cpu'))
+
+        # Check if the checkpoint has model_state key (common in training checkpoints)
+        if "model_state" in checkpoint:
+            # This is likely a training checkpoint with both model and optimizer states
+            logger.info("Found model_state in checkpoint, extracting...")
+            state_dict = checkpoint["model_state"]
+        else:
+            # This might be a direct state dict
+            logger.info("Using checkpoint directly as state dict...")
+            state_dict = checkpoint
+
+        # Initialize your WaveRNN model here
+        from vocoder.models.fatchord_version import WaveRNN
+        from vocoder.hparams import voc_rnn_dims, voc_fc_dims, bits, voc_pad, voc_upsample_factors, num_mels, voc_compute_dims, voc_res_out_dims, voc_res_blocks, hop_length, sample_rate
+
+        # Use the exact parameters from the vocoder.hparams module
+        logger.info(f"Using upsample_factors: {voc_upsample_factors}")
+        vocoder = WaveRNN(
+            rnn_dims=voc_rnn_dims,
+            fc_dims=voc_fc_dims,
+            bits=bits,
+            pad=voc_pad,
+            upsample_factors=voc_upsample_factors,
+            feat_dims=num_mels,
+            compute_dims=voc_compute_dims,
+            res_out_dims=voc_res_out_dims,
+            res_blocks=voc_res_blocks,
+            hop_length=hop_length,
+            sample_rate=sample_rate
+        )
+
+        # Load the state dict
+        vocoder.load_state_dict(state_dict)
+        vocoder.eval()
+
+        return vocoder
+
+    except Exception as e:
+        logger.error(f"Error loading vocoder: {str(e)}")
+        # If you have a backup or simplified vocoder model, you could try loading that instead
+        return None
+
 def load_models():
     global encoder, synthesizer, vocoder_model
 
@@ -118,41 +169,8 @@ def load_models():
             # Use the global vocoder module
             global vocoder_model
 
-            # First try with the module's function
-            vocoder_model = vocoder.load_model(vocoder_path)
-            logger.info(f"Vocoder loaded with module function: {vocoder_model is not None}")
-
-            # If that didn't work, try direct loading
-            if vocoder_model is None:
-                logger.warning("Vocoder model is None after loading with module function")
-                try:
-                    # Try direct torch loading
-                    logger.info("Trying direct torch.load for vocoder model")
-                    model_state = torch.load(vocoder_path, map_location='cpu')
-
-                    if model_state is not None:
-                        # If we can load the state dict, try to initialize the model
-                        from vocoder.models.fatchord_version import WaveRNN
-                        from vocoder.hparams import voc_rnn_dims, voc_fc_dims, bits, voc_pad, voc_upsample_factors, num_mels, voc_compute_dims, voc_res_out_dims, voc_res_blocks, hop_length, sample_rate
-                        vocoder_model = WaveRNN(
-                            rnn_dims=voc_rnn_dims,
-                            fc_dims=voc_fc_dims,
-                            bits=bits,
-                            pad=voc_pad,
-                            upsample_factors=voc_upsample_factors,
-                            feat_dims=num_mels,
-                            compute_dims=voc_compute_dims,
-                            res_out_dims=voc_res_out_dims,
-                            res_blocks=voc_res_blocks,
-                            hop_length=hop_length,
-                            sample_rate=sample_rate
-                        )
-                        vocoder_model.load_state_dict(model_state)
-                        vocoder_model.eval()
-                        logger.info("Successfully loaded vocoder model directly with torch")
-                except Exception as e:
-                    logger.error(f"Failed to load vocoder with direct torch loading: {str(e)}")
-
+            # Use the new load_vocoder function
+            vocoder_model = load_vocoder(vocoder_path)
             logger.info(f"Vocoder loaded successfully: {vocoder_model is not None}")
 
             # Verify required models are loaded (encoder and synthesizer)
