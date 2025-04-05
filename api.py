@@ -117,20 +117,42 @@ def load_models():
             logger.info(f"Vocoder path: {vocoder_path} (exists: {vocoder_path.exists()})")
             # Use the global vocoder module
             global vocoder_model
+
+            # First try with the module's function
             vocoder_model = vocoder.load_model(vocoder_path)
-            # Force the vocoder model to be loaded
+            logger.info(f"Vocoder loaded with module function: {vocoder_model is not None}")
+
+            # If that didn't work, try direct loading
             if vocoder_model is None:
-                logger.error("Vocoder model is None after loading")
-                # Try loading it directly using the vocoder module's function
+                logger.warning("Vocoder model is None after loading with module function")
                 try:
-                    # Try again with the module's function
-                    vocoder_model = vocoder.load_model(vocoder_path)
-                    logger.info("Successfully loaded vocoder model on second attempt")
+                    # Try direct torch loading
+                    logger.info("Trying direct torch.load for vocoder model")
+                    model_state = torch.load(vocoder_path, map_location='cpu')
+
+                    if model_state is not None:
+                        # If we can load the state dict, try to initialize the model
+                        from vocoder.models.fatchord_version import WaveRNN
+                        from vocoder.hparams import voc_rnn_dims, voc_fc_dims, bits, voc_pad, voc_upsample_factors, num_mels, voc_compute_dims, voc_res_out_dims, voc_res_blocks, hop_length, sample_rate
+                        vocoder_model = WaveRNN(
+                            rnn_dims=voc_rnn_dims,
+                            fc_dims=voc_fc_dims,
+                            bits=bits,
+                            pad=voc_pad,
+                            upsample_factors=voc_upsample_factors,
+                            feat_dims=num_mels,
+                            compute_dims=voc_compute_dims,
+                            res_out_dims=voc_res_out_dims,
+                            res_blocks=voc_res_blocks,
+                            hop_length=hop_length,
+                            sample_rate=sample_rate
+                        )
+                        vocoder_model.load_state_dict(model_state)
+                        vocoder_model.eval()
+                        logger.info("Successfully loaded vocoder model directly with torch")
                 except Exception as e:
-                    logger.error(f"Second attempt to load vocoder failed: {str(e)}")
-                    # As a last resort, try to use the global one from the preload
-                    logger.info(f"Using global vocoder from preload if available")
-                    # Don't try to load the model again if it's still None
+                    logger.error(f"Failed to load vocoder with direct torch loading: {str(e)}")
+
             logger.info(f"Vocoder loaded successfully: {vocoder_model is not None}")
 
             # Verify required models are loaded (encoder and synthesizer)
@@ -223,9 +245,35 @@ def clone_voice():
                 logger.warning("Vocoder model not loaded yet, will try to load it on demand")
                 # Try to load it now
                 try:
-                    # Try loading with the module's function
+                    # First try loading with the module's function
                     vocoder_model = vocoder.load_model(MODELS_DIR / "vocoder.pt")
                     logger.info(f"Loaded vocoder model on demand: {vocoder_model is not None}")
+
+                    # If that didn't work, try direct loading
+                    if not vocoder_model:
+                        logger.warning("Trying direct torch.load for vocoder model")
+                        model_state = torch.load(MODELS_DIR / "vocoder.pt", map_location='cpu')
+                        if model_state is not None:
+                            # If we can load the state dict, try to initialize the model
+                            from vocoder.models.fatchord_version import WaveRNN
+                            from vocoder.hparams import voc_rnn_dims, voc_fc_dims, bits, voc_pad, voc_upsample_factors, num_mels, voc_compute_dims, voc_res_out_dims, voc_res_blocks, hop_length, sample_rate
+                            vocoder_model = WaveRNN(
+                                rnn_dims=voc_rnn_dims,
+                                fc_dims=voc_fc_dims,
+                                bits=bits,
+                                pad=voc_pad,
+                                upsample_factors=voc_upsample_factors,
+                                feat_dims=num_mels,
+                                compute_dims=voc_compute_dims,
+                                res_out_dims=voc_res_out_dims,
+                                res_blocks=voc_res_blocks,
+                                hop_length=hop_length,
+                                sample_rate=sample_rate
+                            )
+                            vocoder_model.load_state_dict(model_state)
+                            vocoder_model.eval()
+                            logger.info("Successfully loaded vocoder model directly")
+
                     vocoder_load_attempted = True
                 except Exception as e:
                     logger.error(f"Failed to load vocoder model on demand: {str(e)}")
@@ -233,7 +281,8 @@ def clone_voice():
 
             # If we still don't have a vocoder model, we'll use the synthesizer directly
             # No need to check here, we'll handle it in the synthesis step
-            logger.warning("Will use synthesizer directly without vocoder if needed")
+            if not vocoder_model:
+                logger.warning("Will use synthesizer directly without vocoder")
 
         # Process audio
         try:
@@ -259,38 +308,27 @@ def clone_voice():
             specs = synthesizer.synthesize_spectrograms([text], [embed])
             logger.info(f"Spectrograms synthesized, shape: {specs[0].shape if hasattr(specs[0], 'shape') else len(specs[0])}")
 
-            # Generate waveform
-            logger.info("Inferring waveform...")
+            # Generate waveform using Griffin-Lim directly (skip vocoder)
+            logger.info("Inferring waveform using Griffin-Lim...")
+            # Use synthesizer's built-in Griffin-Lim algorithm
             try:
-                if vocoder_model is not None:
-                    # Try to use vocoder if available
-                    logger.info("Attempting to use vocoder for waveform generation")
-                    generated_wav = vocoder_model.infer_waveform(specs[0])
-                    logger.info(f"Waveform generated with vocoder, length: {len(generated_wav)} samples")
-                else:
-                    # Vocoder not available, use Griffin-Lim
-                    raise ValueError("Vocoder not available")
-            except Exception as e:
-                # If vocoder fails for any reason, fall back to Griffin-Lim
-                logger.warning(f"Vocoder failed or not available: {str(e)}. Using Griffin-Lim algorithm instead.")
-                # Use synthesizer's built-in Griffin-Lim algorithm
-                logger.info("Using Griffin-Lim algorithm for waveform generation")
-                try:
-                    # Try to use the griffin_lim method if it exists
-                    generated_wav = synthesizer.griffin_lim(specs[0])
-                except AttributeError:
-                    # If the method doesn't exist, use the audio module directly
-                    from synthesizer.audio import inv_mel_spectrogram
-                    from synthesizer.hparams import hparams
-                    logger.info("Using audio module's inv_mel_spectrogram function")
-                    generated_wav = inv_mel_spectrogram(specs[0], hparams)
+                # Try to use the griffin_lim method if it exists
+                logger.info("Using synthesizer's griffin_lim method")
+                generated_wav = synthesizer.griffin_lim(specs[0])
+            except (AttributeError, Exception) as e:
+                # If the method doesn't exist or fails, use the audio module directly
+                logger.info(f"Griffin-Lim method failed: {str(e)}. Using audio module directly.")
+                from synthesizer.audio import inv_mel_spectrogram
+                from synthesizer.hparams import hparams
+                logger.info("Using audio module's inv_mel_spectrogram function")
+                generated_wav = inv_mel_spectrogram(specs[0], hparams)
 
-                logger.info(f"Waveform generated with Griffin-Lim, length: {len(generated_wav)} samples")
+            logger.info(f"Waveform generated with Griffin-Lim, length: {len(generated_wav)} samples")
 
-                # Normalize the audio to prevent clipping
-                max_wav = np.max(np.abs(generated_wav))
-                if max_wav > 1.0:
-                    generated_wav = generated_wav / max_wav * 0.9
+            # Normalize the audio to prevent clipping
+            max_wav = np.max(np.abs(generated_wav))
+            if max_wav > 1.0:
+                generated_wav = generated_wav / max_wav * 0.9
         except Exception as e:
             logger.error(f"Voice synthesis error: {str(e)}\n{traceback.format_exc()}")
             return jsonify({"error": f"Voice synthesis failed: {str(e)}"}), 500

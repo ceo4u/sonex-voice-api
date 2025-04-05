@@ -1,7 +1,7 @@
 ﻿import os
 
 # Increase timeout for long-running requests
-timeout = 900
+timeout = 1800  # 30 minutes
 workers = 1
 preload_app = True
 bind = f"0.0.0.0:{os.environ.get('PORT', '5000')}"
@@ -18,4 +18,4 @@ loglevel = 'info'
 graceful_timeout = 300
 
 # Worker timeout
-worker_timeout = 900
+worker_timeout = 1800  # 30 minutes
