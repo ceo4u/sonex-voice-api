@@ -1,22 +1,99 @@
-The audio files in this folder are provided for toolbox testing and
-benchmarking purposes. These are the same reference utterances
-used by the SV2TTS authors to generate the audio samples located at:
-https://google.github.io/tacotron/publications/speaker_adaptation/index.html
+# Sonex Voice Cloning API
 
-The `p240_00000.mp3` and `p260_00000.mp3` files are compressed
-versions of audios from the VCTK corpus available at:
-https://datashare.is.ed.ac.uk/handle/10283/3443
-VCTK.txt contains the copyright notices and licensing information.
+Sonex Voice Cloning API is a deep learning-powered service that allows you to generate synthetic speech from any person's voice using just a short audio sample. Built with Flask and PyTorch, this backend service can be connected with a frontend interface for real-time voice cloning and text-to-speech synthesis.
 
-The `1320_00000.mp3`, `3575_00000.mp3`, `6829_00000.mp3`
-and `8230_00000.mp3` files are compressed versions of audios
-from the LibriSpeech dataset available at: https://openslr.org/12
-For these files, the following notice applies:
-```
-LibriSpeech (c) 2014 by Vassil Panayotov
+---
 
-LibriSpeech ASR corpus is licensed under a
-Creative Commons Attribution 4.0 International License.
+## 🔥 Features
 
-See <http://creativecommons.org/licenses/by/4.0/>.
-```
+- 🎙️ Clone any voice using a short WAV sample.
+- 🗣️ Generate speech in the cloned voice from text.
+- 🧠 Powered by deep learning models for natural synthesis.
+- 🌐 REST API support for easy frontend integration.
+- ☁️ Deployable on Render, Docker, or any cloud service.
+
+---
+
+## 🛠️ Tools, Libraries, and Frameworks
+
+### Tools
+- Git & GitHub
+- Docker
+- Render (for live deployment)
+
+### Libraries
+- Python 3
+- NumPy
+- librosa
+- torch
+- scipy
+- soundfile
+- tqdm
+- flask
+- scikit-learn
+- matplotlib
+
+### Frameworks
+- Flask (for API)
+- PyTorch (for voice synthesis models)
+
+---
+
+## 🚀 Getting Started
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/ceo4u/sonex-voice-api.git
+cd sonex-voice-api
+
+2. Create a virtual environment (Optional but recommended)
+
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+3. Install dependencies
+
+pip install -r requirements.txt
+
+4. Download pretrained models-
+bash download_models.sh
+
+5. Start the server-
+python api.py
+
+Or with Docker:-
+docker build -t sonex-api .
+docker run -p 5000:5000 sonex-api
+
+📡 API Endpoints
+GET /health
+Check if the API is up and running.
+
+POST /clone-voice
+Request Form-Data:
+
+audio: WAV file of speaker (reference voice)
+
+text: The text to synthesize into cloned voice
+
+Response:
+
+A .wav file of the synthesized voice.
+
+🧪 Test API with Python
+python
+import requests
+
+url = "https://sonex-voice-api-.onrender.com/clone-voice"
+files = {'audio': open("sample.wav", "rb")}
+data = {'text': "Welcome to Sonex Voice Cloning."}
+
+response = requests.post(url, files=files, data=data)
+
+with open("output.wav", "wb") as f:
+    f.write(response.content)
+
+📜 License
+This project is licensed under the MIT License. See the LICENSE file for details.
+
